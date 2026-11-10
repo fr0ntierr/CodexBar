@@ -36,7 +36,7 @@ struct ProviderMenuBarPercentWindowSettingsView: View {
                 if let provider = self.instanceID.firstPartyProvider {
                     return self.settings.menuBarLayoutResolution(for: provider).layout
                 }
-                return self.settings.menuBarLayout(forPlugin: self.instanceID)
+                return self.settings.menuBarLayout
             },
             set: { self.settings.setMenuBarLayout($0, forInstanceID: self.instanceID) })
     }

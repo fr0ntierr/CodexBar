@@ -5,22 +5,12 @@ extension Notification.Name {
     static let codexbarDebugBlinkNow = Notification.Name("codexbarDebugBlinkNow")
     #if DEBUG
     static let codexbarDebugSimulateMemoryPressure =
-        Notification.Name("com.steipete.codexbar.debug.simulateMemoryPressure")
+        Notification.Name("com.steipete.codexbarlite.debug.simulateMemoryPressure")
     #endif
     static let codexbarSessionLimitReset = Notification.Name("codexbarSessionLimitReset")
     static let codexbarWeeklyLimitReset = Notification.Name("codexbarWeeklyLimitReset")
     static let codexbarProviderConfigDidChange = Notification.Name("codexbarProviderConfigDidChange")
     static let codexbarLocalConfigFileDidChange = Notification.Name("codexbarLocalConfigFileDidChange")
-    static let codexbarUsageSnapshotsDidChange = Notification.Name("codexbarUsageSnapshotsDidChange")
-    static let codexbarQuotaWarningDidPost = Notification.Name("codexbarQuotaWarningDidPost")
-}
-
-final class UsageSnapshotsDidChangeEvent: NSObject, @unchecked Sendable {
-    let snapshots: [AccountSnapshotSyncPayload]
-
-    init(snapshots: [AccountSnapshotSyncPayload]) {
-        self.snapshots = snapshots
-    }
 }
 
 @MainActor
@@ -50,20 +40,5 @@ final class WeeklyLimitResetEvent: NSObject {
         self.accountIdentifier = accountIdentifier
         self.accountLabel = accountLabel
         self.usedPercent = usedPercent
-    }
-}
-
-@MainActor
-final class QuotaWarningPostedEvent: NSObject {
-    let provider: UsageProvider
-    let window: QuotaWarningWindow
-    let threshold: Int
-    let postedAt: Date
-
-    init(provider: UsageProvider, window: QuotaWarningWindow, threshold: Int, postedAt: Date) {
-        self.provider = provider
-        self.window = window
-        self.threshold = threshold
-        self.postedAt = postedAt
     }
 }

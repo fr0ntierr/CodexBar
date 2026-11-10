@@ -2,7 +2,7 @@ import Foundation
 
 package enum ProcessExitRelease {
     #if os(Linux)
-    private static let queue = DispatchQueue(label: "com.steipete.CodexBar.process-exit-release", qos: .utility)
+    private static let queue = DispatchQueue(label: "com.steipete.CodexBarLite.process-exit-release", qos: .utility)
     private static let maximumRetryDelay: TimeInterval = 2
     #endif
 

@@ -233,7 +233,7 @@ public struct ProviderFetchResult: Sendable {
 }
 
 public enum ProviderSupplementalUsageUpdate: Sendable {
-    case grokResetCredits(GrokRateLimitResetCreditsSnapshot?)
+    case none
 }
 
 public struct ProviderFetchAttempt: Sendable {
@@ -283,9 +283,6 @@ public enum ProviderFetchError: LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case let .noAvailableStrategy(provider):
-            if provider == .kiro {
-                return "Kiro usage requires the Kiro CLI. Install it from https://kiro.dev/docs/cli/ and run 'kiro-cli login' first."
-            }
             return "No available fetch strategy for \(provider.rawValue)."
         }
     }

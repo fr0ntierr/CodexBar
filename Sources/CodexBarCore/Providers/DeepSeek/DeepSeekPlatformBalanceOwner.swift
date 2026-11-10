@@ -14,7 +14,7 @@ public struct DeepSeekPlatformBalanceOwner: Sendable, Equatable {
         guard !profileID.isEmpty, !token.isEmpty else { return nil }
         #if canImport(CryptoKit)
         self.profileID = profileID
-        let material = "com.steipete.codexbar.deepseek-platform-balance.v1\0" + token
+        let material = "com.steipete.codexbarlite.deepseek-platform-balance.v1\0" + token
         self.tokenDigest = SHA256.hash(data: Data(material.utf8))
             .map { String(format: "%02x", $0) }.joined()
         #else

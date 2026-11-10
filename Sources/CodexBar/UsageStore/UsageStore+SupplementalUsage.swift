@@ -60,38 +60,5 @@ extension UsageStore {
         expectedUpdatedAt: Date,
         accountID: UUID?)
     {
-        // Provider-specific by design: only Grok publishes remaining reset credits as a supplemental update.
-        guard provider == .grok else { return }
-
-        let resetCredits: GrokRateLimitResetCreditsSnapshot? = switch update {
-        case let .grokResetCredits(snapshot): snapshot
-        }
-        if let accountID,
-           let account = self.uniqueTokenAccount(provider: provider, accountID: accountID),
-           let accountSnapshot = self.accountSnapshots[provider.instanceID]?.first(where: {
-               $0.account.id == accountID && $0.snapshot?.updatedAt == expectedUpdatedAt
-           }),
-           let currentAccountUsage = accountSnapshot.snapshot
-        {
-            self.cacheTokenAccountSnapshot(
-                provider: provider,
-                account: account,
-                snapshot: currentAccountUsage.withGrokResetCredits(resetCredits),
-                sourceLabel: accountSnapshot.sourceLabel)
-        }
-
-        let updatesLiveSnapshot = accountID.map {
-            self.settings.effectiveSelectedTokenAccount(for: provider)?.id == $0
-        } ?? true
-        if updatesLiveSnapshot,
-           let current = self.snapshots[provider.instanceID],
-           current.updatedAt == expectedUpdatedAt
-        {
-            let updated = current.withGrokResetCredits(resetCredits)
-            self.snapshots[provider.instanceID] = updated
-            if self.lastKnownResetSnapshots[provider.instanceID]?.updatedAt == expectedUpdatedAt {
-                self.lastKnownResetSnapshots[provider.instanceID] = updated
-            }
-        }
     }
 }

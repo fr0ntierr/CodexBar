@@ -76,6 +76,7 @@ enum GeneralSettingsMenuOptions {
     static let languages = AppLanguage.allCases.map(\.rawValue)
     static let refreshFrequencies = RefreshFrequency.allCases
     static let lowPowerModePreferences = LowPowerModePreference.allCases
+    static let confettiCelebrations = ConfettiCelebrationOption.allCases
 
     static func terminalApps(selected: TerminalApp) -> [TerminalApp] {
         TerminalApp.pickerOptions(selected: selected)
@@ -116,8 +117,4 @@ enum MenuSettingsMenuOptions {
         case let workDays?: L("%d days", workDays)
         }
     }
-}
-
-enum NotificationsSettingsMenuOptions {
-    static let confettiCelebrations = ConfettiCelebrationOption.allCases
 }

@@ -2,22 +2,11 @@ import CodexBarCore
 
 extension StatusItemController {
     func menuLocalizationSignature() -> String {
-        let pluginSignature = self.topLevelUserProviderPlugins().map { plugin in
-            [
-                plugin.manifest.id.rawValue,
-                plugin.manifest.name,
-                plugin.manifest.icon.monogram,
-                plugin.manifest.icon.tint,
-                plugin.manifest.icon.svg ?? "",
-                self.store.menuBarSnapshot(for: plugin.manifest.id)?.iconProvider?.rawValue ?? "",
-            ].map { "\($0.utf8.count):\($0)" }.joined()
-        }.joined()
         return [
             codexBarLocalizationSignature(),
             self.settings.hidePersonalInfo ? "hide-personal-info" : "show-personal-info",
             L("Overview"),
             L("Cost"),
-            pluginSignature,
         ].joined(separator: "|")
     }
 

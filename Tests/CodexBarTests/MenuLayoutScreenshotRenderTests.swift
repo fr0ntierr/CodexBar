@@ -586,9 +586,9 @@ final class MenuLayoutScreenshotRenderTests: XCTestCase {
         settings.statusChecksEnabled = false
         settings.refreshFrequency = .manual
         settings.mergeIcons = true
-        settings.selectedMenuProvider = UsageProvider.zai.instanceID
-        if let metadata = ProviderRegistry.shared.metadata[.zai] {
-            settings.setProviderEnabled(provider: .zai, metadata: metadata, enabled: true)
+        settings.selectedMenuProvider = UsageProvider.claude.instanceID
+        if let metadata = ProviderRegistry.shared.metadata[.claude] {
+            settings.setProviderEnabled(provider: .claude, metadata: metadata, enabled: true)
         }
         let fetcher = UsageFetcher()
         let store = UsageStore(

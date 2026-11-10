@@ -27,14 +27,13 @@ let package = Package(
     products: {
         var products: [Product] = [
             .library(name: "CodexBarCore", targets: ["CodexBarCore"]),
-            .executable(name: "CodexBarCLI", targets: ["CodexBarCLI"]),
             // Offline adaptive-refresh replay harness. Keep the supporting library package-internal.
             .executable(name: "AdaptiveReplayCLI", targets: ["AdaptiveReplayCLI"]),
         ]
 
         #if os(macOS)
         products.append(contentsOf: [
-            .executable(name: "CodexBar", targets: ["CodexBar"]),
+            .executable(name: "CodexBarLite", targets: ["CodexBar"]),
             .executable(name: "CodexBarClaudeWatchdog", targets: ["CodexBarClaudeWatchdog"]),
             .executable(name: "CodexBarWidget", targets: ["CodexBarWidget"]),
             .executable(name: "CodexBarClaudeWebProbe", targets: ["CodexBarClaudeWebProbe"]),
@@ -45,7 +44,6 @@ let package = Package(
     }(),
     dependencies: [
         .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.10.1"),
-        .package(url: "https://github.com/steipete/Commander", from: "0.3.0"),
         .package(url: "https://github.com/apple/swift-crypto.git", "4.5.2"..<"6.0.0"),
         .package(url: "https://github.com/apple/swift-log", from: "1.16.2"),
         .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", from: "3.1.0"),
@@ -90,21 +88,6 @@ let package = Package(
                 linkerSettings: sqlite3LinkerSettings + [
                     .linkedFramework("JavaScriptCore", .when(platforms: [.macOS])),
                 ]),
-            .executableTarget(
-                name: "CodexBarCLI",
-                dependencies: [
-                    "CodexBarCore",
-                    .product(name: "Commander", package: "Commander"),
-                    .product(name: "Crypto", package: "swift-crypto"),
-                ],
-                path: "Sources/CodexBarCLI",
-                swiftSettings: [
-                    .enableUpcomingFeature("StrictConcurrency"),
-                ],
-                linkerSettings: sqlite3LinkerSettings + [
-                    // musl's default thread stack is too small for synchronous Swift cost scans.
-                    .unsafeFlags(["-Xlinker", "-z", "-Xlinker", "stack-size=8388608"], .when(platforms: [.linux])),
-                ]),
             // Crash-test subprocess: tests SIGKILL it mid-save to prove the cost store's
             // save cycle is atomic. Not shipped; built only as a test dependency.
             .executableTarget(
@@ -147,7 +130,6 @@ let package = Package(
                 path: "Tests/AdaptiveReplayCLITests",
                 swiftSettings: [
                     .enableUpcomingFeature("StrictConcurrency"),
-                    .enableExperimentalFeature("SwiftTesting"),
                 ]),
             .testTarget(
                 name: "AdaptiveReplayKitTests",
@@ -155,7 +137,6 @@ let package = Package(
                 path: "Tests/AdaptiveReplayKitTests",
                 swiftSettings: [
                     .enableUpcomingFeature("StrictConcurrency"),
-                    .enableExperimentalFeature("SwiftTesting"),
                 ]),
             .testTarget(
                 name: "CodexBarPluginTests",
@@ -163,19 +144,16 @@ let package = Package(
                 path: "TestsPlugin",
                 swiftSettings: [
                     .enableUpcomingFeature("StrictConcurrency"),
-                    .enableExperimentalFeature("SwiftTesting"),
                 ]),
             .testTarget(
                 name: "CodexBarLinuxTests",
                 dependencies: [
                     "CodexBarCore",
-                    "CodexBarCLI",
                     .target(name: "CSQLite3", condition: .when(platforms: [.linux])),
                 ],
                 path: "TestsLinux",
                 swiftSettings: [
                     .enableUpcomingFeature("StrictConcurrency"),
-                    .enableExperimentalFeature("SwiftTesting"),
                 ]),
         ]
 
@@ -199,7 +177,7 @@ let package = Package(
                 ],
                 path: "Sources/CodexBar",
                 resources: [
-                    .process("Resources"),
+                    .copy("Resources"),
                 ],
                 swiftSettings: [
                     // Opt into Swift 6 strict concurrency (approachable migration path).
@@ -228,7 +206,7 @@ let package = Package(
         targets.append(.testTarget(
             name: "CodexBarTests",
             dependencies: [
-                "CodexBar", "CodexBarCore", "CodexBarCLI", "CodexBarCostStoreCrashProbe", "CodexBarWidget",
+                "CodexBar", "CodexBarCore", "CodexBarCostStoreCrashProbe", "CodexBarWidget",
                 .product(name: "Sparkle", package: "Sparkle"),
             ],
             path: "Tests",
@@ -239,14 +217,12 @@ let package = Package(
                 "CodexBarTests/ProviderPluginExtensionParityTests.swift",
                 "CodexBarTests/ProviderPluginParityTests.swift",
                 "CodexBarTests/ProviderPluginRuntimeTests.swift",
-                "CodexBarTests/Sub2APIPluginGoldenTests.swift",
             ],
             resources: [
                 .copy("CodexBarTests/Fixtures"),
             ],
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency"),
-                .enableExperimentalFeature("SwiftTesting"),
             ],
             linkerSettings: [
                 // XCTest's executable is three directories below its sibling framework products.

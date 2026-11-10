@@ -27,8 +27,6 @@ extension UsageStore {
         var pendingLowConfirmation: Bool
         var pendingLowObservedAt: Date?
         var lastPostedResetBoundary: Date?
-        var notificationReceipt: LimitResetNotificationReceipt?
-        var lastNotifiedResetBoundary: Date?
         var planRawValue: String?
         /// Distinguishes states that carry the Codex plan/dedup evidence added with delayed reset confirmation.
         var codexWeeklyEvidenceVersion: Int?
@@ -45,8 +43,6 @@ extension UsageStore {
             pendingLowConfirmation: Bool = false,
             pendingLowObservedAt: Date? = nil,
             lastPostedResetBoundary: Date? = nil,
-            notificationReceipt: LimitResetNotificationReceipt? = nil,
-            lastNotifiedResetBoundary: Date? = nil,
             planRawValue: String? = nil,
             codexWeeklyEvidenceVersion: Int? = Self.currentCodexWeeklyEvidenceVersion,
             grokWeeklyBoundaryConfirmed: Bool? = nil)
@@ -60,8 +56,6 @@ extension UsageStore {
             self.pendingLowConfirmation = pendingLowConfirmation
             self.pendingLowObservedAt = pendingLowObservedAt
             self.lastPostedResetBoundary = lastPostedResetBoundary
-            self.notificationReceipt = notificationReceipt
-            self.lastNotifiedResetBoundary = lastNotifiedResetBoundary
             self.planRawValue = planRawValue
             self.codexWeeklyEvidenceVersion = codexWeeklyEvidenceVersion
             self.grokWeeklyBoundaryConfirmed = grokWeeklyBoundaryConfirmed
@@ -77,8 +71,6 @@ extension UsageStore {
             case pendingLowConfirmation
             case pendingLowObservedAt
             case lastPostedResetBoundary
-            case notificationReceipt
-            case lastNotifiedResetBoundary
             case planRawValue
             case codexWeeklyEvidenceVersion
             case grokWeeklyBoundaryConfirmed
@@ -103,11 +95,6 @@ extension UsageStore {
             self.lastPostedResetBoundary = try container.decodeIfPresent(
                 Date.self,
                 forKey: .lastPostedResetBoundary)
-            self.notificationReceipt = try container.decodeIfPresent(
-                LimitResetNotificationReceipt.self, forKey: .notificationReceipt)
-            self.lastNotifiedResetBoundary = try container.decodeIfPresent(
-                Date.self,
-                forKey: .lastNotifiedResetBoundary)
             self.planRawValue = try container.decodeIfPresent(String.self, forKey: .planRawValue)
             self.codexWeeklyEvidenceVersion = try container.decodeIfPresent(
                 Int.self,
@@ -124,7 +111,6 @@ extension UsageStore {
         let accountKey: String?
         let capturedAt: Date
         let codexLimitResetOwnerKey: CodexLimitResetOwnerKey?
-        let sessionRestoredNotificationPending: Bool
     }
 
     struct LimitResetObservation {
@@ -184,7 +170,6 @@ extension UsageStore {
         descriptor: LimitResetDetectionDescriptor,
         observation: LimitResetObservation?)
     {
-        let restored = descriptor.seriesName == .session && context.sessionRestoredNotificationPending
         guard let observation, let accountIdentifier = self.limitResetAccountIdentifier(
             provider: context.provider,
             account: context.account,
@@ -192,7 +177,6 @@ extension UsageStore {
             accountKey: context.accountKey,
             codexLimitResetOwnerKey: context.codexLimitResetOwnerKey)
         else {
-            if restored { self.postSessionQuotaTransitionIfEnabled(.restored, provider: context.provider) }
             return
         }
         let detectorKey = Self.limitResetDetectorStateKey(
@@ -217,30 +201,12 @@ extension UsageStore {
                 observation: observation,
                 previousState: previousState,
                 requiresLowConfirmation: requiresLowConfirmation))
-        var state = transition.state
-        let notice = self.prepareLimitResetNotification(
-            state: &state,
-            previousState: previousState,
-            observation: observation,
-            resetConfirmed: transition.shouldPost,
-            restored: restored)
+        let state = transition.state
         states[detectorKey] = state
         self.persistPlanUtilizationStates(
             states,
             defaultsKey: descriptor.defaultsKey,
             logName: descriptor.resetKind)
-        if let notice {
-            switch notice {
-            case .restored:
-                self.postSessionQuotaTransitionIfEnabled(.restored, provider: context.provider)
-            case .reset:
-                self.postLimitResetNotificationIfNeeded(
-                    provider: context.provider,
-                    window: descriptor.seriesName == .session ? .session : .weekly,
-                    accountLabel: self.limitResetAccountLabel(
-                        provider: context.provider, account: context.account, snapshot: context.snapshot))
-            }
-        }
 
         if transition.claudeWeeklyRecoveryPending, currentUsed > Self.limitResetThreshold {
             CodexBarLog.logger(LogCategories.confetti).debug(
@@ -270,11 +236,6 @@ extension UsageStore {
             ])
         switch descriptor.seriesName {
         case .session:
-            self.emitQuotaResetHook(
-                provider: context.provider.instanceID,
-                window: .session,
-                usedPercent: currentUsed,
-                accountLabel: accountLabel)
             let event = SessionLimitResetEvent(
                 provider: context.provider,
                 accountIdentifier: accountIdentifier,
@@ -282,11 +243,6 @@ extension UsageStore {
                 usedPercent: currentUsed)
             NotificationCenter.default.post(name: .codexbarSessionLimitReset, object: event)
         case .weekly:
-            self.emitQuotaResetHook(
-                provider: context.provider.instanceID,
-                window: .weekly,
-                usedPercent: currentUsed,
-                accountLabel: accountLabel)
             let event = WeeklyLimitResetEvent(
                 provider: context.provider,
                 accountIdentifier: accountIdentifier,
@@ -309,7 +265,6 @@ extension UsageStore {
         let wasAboveCodexWeeklyCandidateThreshold = currentUsed > self.codexWeeklyResetCandidateBaselineThreshold
         let isClaudeWeekly = input.provider == .claude && input.seriesName == .weekly
         let isCodexWeekly = input.provider == .codex && input.seriesName == .weekly
-        let isGrokWeekly = input.provider == .grok && input.seriesName == .weekly
         let claudeWeeklyRecoveryPending = isClaudeWeekly
             && previousState?.recoveryAboveThresholdCount != nil
         let planRawValue = isCodexWeekly ? self.limitResetPlanIdentifier(input.snapshot) : nil
@@ -359,23 +314,9 @@ extension UsageStore {
         // can advertise the next boundary right after rollover.
         // A fresh detector can first see a transient low sample that advertises a later boundary. Let a
         // later sample whose boundary is earlier replace that untrusted seed instead of freezing it.
-        var grokWeeklyBoundaryRebaselines = false
-        if isGrokWeekly, !shouldPost, previousState?.grokWeeklyBoundaryConfirmed != true,
-           let previousBoundary = previousState?.resetBoundary,
-           let currentBoundary = observation.resetBoundary,
-           currentBoundary < previousBoundary
-        {
-            grokWeeklyBoundaryRebaselines = true
-        }
-        let preserveGrokWeeklyBoundary = isGrokWeekly
-            && !shouldPost
-            && !grokWeeklyBoundaryRebaselines
-            && previousState?.resetBoundary != nil
         let shouldPreserveBoundary = !sourceChanged
-            && !grokWeeklyBoundaryRebaselines
-            && (preserveGrokWeeklyBoundary
-                || (!resetBoundaryAllowsPost
-                    && (input.seriesName == .session || previousState?.resetBoundary != nil)))
+            && (!resetBoundaryAllowsPost
+                && (input.seriesName == .session || previousState?.resetBoundary != nil))
         let shouldPreserveBaseline = suppressedGuardedCrossing
             && !planChanged
             && !codexDecision.expiredCandidate
@@ -446,11 +387,8 @@ extension UsageStore {
             pendingLowConfirmation: pendingLowConfirmation,
             pendingLowObservedAt: pendingLowObservedAt,
             lastPostedResetBoundary: lastPostedResetBoundary,
-            notificationReceipt: previousState?.notificationReceipt,
-            lastNotifiedResetBoundary: previousState?.lastNotifiedResetBoundary,
             planRawValue: planRawValue,
-            grokWeeklyBoundaryConfirmed: isGrokWeekly && shouldPost
-                ? true : previousState?.grokWeeklyBoundaryConfirmed)
+            grokWeeklyBoundaryConfirmed: previousState?.grokWeeklyBoundaryConfirmed)
         return LimitResetDetectorTransition(
             state: state,
             shouldPost: shouldPost,
@@ -525,16 +463,6 @@ extension UsageStore {
                 previous: input.previousState?.resetBoundary,
                 current: input.observation.resetBoundary,
                 requiresPreviousBoundary: true)
-        }
-        if input.provider == .grok, input.seriesName == .weekly {
-            guard let previousBoundary = input.previousState?.resetBoundary,
-                  let currentBoundary = input.observation.resetBoundary,
-                  input.observation.observedAt >= previousBoundary,
-                  currentBoundary > previousBoundary
-            else { return false }
-            return !self.codexWeeklyResetCandidateBoundaryMatches(
-                input.previousState?.lastPostedResetBoundary,
-                currentBoundary)
         }
         return true
     }

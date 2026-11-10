@@ -78,11 +78,6 @@ struct WidgetSnapshotTests {
         #expect(codex?.last30DaysLabel == "\(period) API est. · not billed")
         #expect(claude?.sessionLabel == "Today")
         #expect(claude?.last30DaysLabel == period)
-        for provider in [UsageProvider.bedrock, .mistral] {
-            let summary = UsageStore.widgetTokenUsageSummary(from: snapshot, provider: provider)
-            #expect(summary?.sessionLabel == "Latest billing day")
-            #expect(summary?.last30DaysLabel == period)
-        }
     }
 
     @Test

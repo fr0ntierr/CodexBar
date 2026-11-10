@@ -221,7 +221,6 @@ extension UsageStore {
         shouldUpdatePreferredAccountKey: Bool = true,
         shouldAdoptUnscopedHistory: Bool = true,
         codexLimitResetOwnerKey: CodexLimitResetOwnerKey? = nil,
-        sessionRestoredNotificationPending: Bool = false,
         now: Date = Date())
         async
     {
@@ -264,9 +263,6 @@ extension UsageStore {
         }
         if provider == .claude, isClaudeOAuthSample, detectorAccountKey == nil {
             // Persisting without a high-entropy owner would merge unrelated OAuth accounts into `unscoped`.
-            if sessionRestoredNotificationPending { self.postSessionQuotaTransitionIfEnabled(
-                .restored,
-                provider: provider) }
             return
         }
         let detectorContext = LimitResetDetectionContext(
@@ -275,8 +271,7 @@ extension UsageStore {
             snapshot: snapshot,
             accountKey: detectorAccountKey,
             capturedAt: now,
-            codexLimitResetOwnerKey: codexLimitResetOwnerKey,
-            sessionRestoredNotificationPending: sessionRestoredNotificationPending)
+            codexLimitResetOwnerKey: codexLimitResetOwnerKey)
         self.postLimitResetCelebrationsIfNeeded(context: detectorContext, samples: detectorSamples)
 
         guard !samples.isEmpty else { return }
@@ -545,6 +540,61 @@ extension UsageStore {
             observation: weeklyObservation)
     }
 
+    private static let antigravityQuotaSummaryWindowIDPrefix = "antigravity-quota-summary-"
+
+    private static func hasAntigravityQuotaSummaryWindows(snapshot: UsageSnapshot) -> Bool {
+        snapshot.extraRateWindows?.contains {
+            $0.id.hasPrefix(Self.antigravityQuotaSummaryWindowIDPrefix)
+        } == true
+    }
+
+    private static func antigravityWindow(
+        snapshot: UsageSnapshot,
+        windowMinutes: Int) -> RateWindow?
+    {
+        let windows: [RateWindow] = if Self.hasAntigravityQuotaSummaryWindows(snapshot: snapshot) {
+            snapshot.extraRateWindows?
+                .filter {
+                    $0.usageKnown
+                        && $0.id.hasPrefix(Self.antigravityQuotaSummaryWindowIDPrefix)
+                        && $0.window.windowMinutes == windowMinutes
+                }
+                .map(\.window) ?? []
+        } else {
+            [snapshot.primary, snapshot.secondary, snapshot.tertiary]
+                .compactMap(\.self)
+                .filter {
+                    $0.windowMinutes == windowMinutes
+                        || (windowMinutes == 5 * 60 && $0.windowMinutes == nil)
+                }
+        }
+        return windows.max { $0.usedPercent < $1.usedPercent }
+    }
+
+    static func isSessionWindow(_ window: RateWindow) -> Bool {
+        guard let minutes = window.windowMinutes else { return true }
+        return minutes <= 6 * 60
+    }
+
+    func sessionQuotaWindow(
+        provider: UsageProvider,
+        snapshot: UsageSnapshot) -> (window: RateWindow, source: SessionQuotaWindowSource)?
+    {
+        if provider == .antigravity {
+            guard let window = Self.antigravityWindow(snapshot: snapshot, windowMinutes: 5 * 60) else {
+                return nil
+            }
+            let source: SessionQuotaWindowSource = Self.hasAntigravityQuotaSummaryWindows(snapshot: snapshot)
+                ? .antigravityQuotaSummary
+                : .antigravityLegacy
+            return (window, source)
+        }
+        if let primary = snapshot.primary, Self.isSessionWindow(primary) {
+            return (primary, .primary)
+        }
+        return nil
+    }
+
     static func isSemanticSessionResetWindow(
         _ resolved: (window: RateWindow, source: SessionQuotaWindowSource)) -> Bool
     {
@@ -553,7 +603,7 @@ extension UsageStore {
         case .primary:
             guard let minutes = resolved.window.windowMinutes else { return false }
             return minutes > 0 && minutes <= 6 * 60
-        case .copilotSecondaryFallback, .antigravityQuotaSummary, .antigravityLegacy:
+        case .antigravityQuotaSummary, .antigravityLegacy:
             return true
         }
     }
@@ -615,19 +665,6 @@ extension UsageStore {
             appendWindow(snapshot.primary, name: .session)
             appendWindow(snapshot.secondary, name: .weekly)
             appendWindow(snapshot.tertiary, name: .opus)
-        case .opencodego:
-            appendWindow(snapshot.primary, name: .session)
-            appendWindow(snapshot.secondary, name: .weekly)
-            appendWindow(snapshot.tertiary, name: .monthly)
-        case .kiro, .mimo, .stepfun, .ollama:
-            if snapshot.primary?.windowMinutes == ProviderPaceCapability.monthlyWindowSentinelMinutes {
-                appendWindow(snapshot.primary, name: .monthly)
-                if provider == .ollama {
-                    appendWindow(snapshot.secondary, name: .weekly)
-                }
-            } else {
-                appendGenericSessionEquivalentWindows()
-            }
         case .antigravity:
             if forSessionEquivalents {
                 guard let windows = self.sessionEquivalentWindows(provider: provider, snapshot: snapshot) else {

@@ -18,7 +18,7 @@ struct ProviderPluginResultTests {
 
     static func runtime(_ result: String, _ engine: ProviderPluginEngineKind) throws -> ProviderPluginRuntime {
         try ProviderPluginRuntime(source: """
-        defineProvider({id: 'fireworks', name: 'Fixture', endpoints: ['https://api.fireworks.ai'], settings: [],
+        defineProvider({id: 'openai', name: 'Fixture', endpoints: ['https://api.openai.com'], settings: [],
           async fetchUsage(ctx) { return \(result); }});
         """, engine: engine)
     }
@@ -75,56 +75,20 @@ extension ProviderPluginResultTests {
     }
 
     @Test
-    func `CLI writes preserve unrelated config and reject stale or foreign changes`() async throws {
+    func `CLI writes reject unapproved settings`() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = CodexBarConfigStore(fileURL: directory.appendingPathComponent("config.json"))
         var config = CodexBarConfig.makeDefault()
-        var fireworks = ProviderConfig(id: .fireworks)
-        fireworks.apiKey = "fixture-key"
-        var other = ProviderConfig(id: .openai)
-        other.workspaceID = "project-fixture"
-        config.setProviderConfig(fireworks)
-        config.setProviderConfig(other)
+        let openai = ProviderConfig(id: .openai)
+        config.setProviderConfig(openai)
         try store.save(config)
         let writer = ProviderPluginConfigWriter()
         #expect(await writer.save(
-            provider: .fireworks,
-            values: ["ACCOUNT_SLUG": "fixture"],
-            expected: fireworks,
-            store: store) == .saved)
-        let saved = try #require(try store.load())
-        #expect(ProviderPluginResultPolicy.matches(saved.providerConfig(for: .openai), other))
-        #expect(saved.providerConfig(for: .fireworks)?.apiKey == "fixture-key")
-        #expect(saved.providerConfig(for: .fireworks)?.accountSlug == "fixture")
-        #expect(await writer.save(
-            provider: .fireworks,
-            values: ["ACCOUNT_SLUG": "late"],
-            expected: fireworks,
-            store: store) == .stale)
-        let current = saved.providerConfig(for: .fireworks)
-        #expect(await writer.save(
-            provider: .fireworks,
-            values: ["ACCOUNT_SLUG": "fixture"],
-            expected: current,
-            store: store) == .unchanged)
-        #expect(await writer
-            .save(provider: .openai, values: ["ACCOUNT_SLUG": "bad"], expected: other, store: store) == .failed)
-        #expect(await writer.save(
-            provider: .fireworks,
-            values: ["OPENAI_PROJECT_ID": "bad"],
-            expected: current,
+            provider: .openai,
+            values: ["UNAPPROVED": "fixture"],
+            expected: openai,
             store: store) == .failed)
-        let reloaded = try #require(try store.load())
-        #expect(try store.encodedData(for: reloaded) == store.encodedData(for: saved))
-        let blocked = directory.appendingPathComponent("file")
-        try Data().write(to: blocked)
-        #expect(await writer.save(
-            provider: .fireworks,
-            values: ["ACCOUNT_SLUG": "fixture"],
-            expected: CodexBarConfig.makeDefault().providerConfig(for: .fireworks),
-            store: CodexBarConfigStore(fileURL: blocked.appendingPathComponent("config.json"))) ==
-            .failed)
     }
 }
 
@@ -143,7 +107,7 @@ extension ProviderPluginResultTests {
             await #expect(throws: ProviderPluginError.self) { try await runtime.fetchResult() }
         }
         let runtime = try ProviderPluginRuntime(source: """
-        defineProvider({id:'fireworks',name:'Fixture',endpoints:['https://api.fireworks.ai'],settings:[],
+        defineProvider({id:'openai',name:'Fixture',endpoints:['https://api.openai.com'],settings:[],
           async fetchUsage(ctx) { return {usage:{empty:true},persist:{ACCOUNT_SLUG:'fixture'}}; }});
         """, enforcesUserResponsePolicy: true, engine: engine)
         await #expect(throws: ProviderPluginError.self) { try await runtime.fetchResult() }
@@ -157,7 +121,7 @@ extension ProviderPluginResultTests {
         let task = Task {
             withUnsafeCurrentTask { $0?.cancel() }
             return await ProviderPluginConfigWriter.shared.save(
-                provider: .fireworks, values: ["ACCOUNT_SLUG": "fixture"], expected: nil, store: store)
+                provider: .openai, values: ["ACCOUNT_SLUG": "fixture"], expected: nil, store: store)
         }
         #expect(await task.value == .stale)
         #expect(!FileManager.default.fileExists(atPath: store.fileURL.path))

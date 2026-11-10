@@ -32,14 +32,10 @@ public enum CodexBarCoreResourceSmoke {
         if bundle.url(forResource: "provider-plugin-prelude", withExtension: "js") == nil {
             failures.append("provider-plugin-prelude.js missing from \(bundle.bundleURL.path)")
         }
-        let sucrase = "sucrase-\(UserProviderPluginLoader.sucraseVersion).min"
-        if bundle.url(forResource: sucrase, withExtension: "js") == nil {
-            failures.append("\(sucrase).js missing from \(bundle.bundleURL.path)")
-        }
 
         let pluginNames = bundle.paths(forResourcesOfType: "js", inDirectory: nil)
             .map { URL(fileURLWithPath: $0).deletingPathExtension().lastPathComponent }
-            .filter { $0 != "provider-plugin-prelude" && $0 != sucrase }
+            .filter { $0 != "provider-plugin-prelude" && !$0.hasPrefix("sucrase") }
             .sorted()
         if pluginNames.isEmpty {
             failures.append("no bundled provider plugin scripts found in \(bundle.bundleURL.path)")

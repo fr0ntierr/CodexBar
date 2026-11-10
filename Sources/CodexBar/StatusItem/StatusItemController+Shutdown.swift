@@ -25,8 +25,6 @@ extension StatusItemController {
         self.frontmostProviderMonitor?.stop()
         self.frontmostProviderMonitor = nil
         self.agentSessions.stop()
-        self.store.credentialNotificationsStopped = true
-        self.store.retireCredentialNotifications()
         self.menuAppearanceObserver?.stop()
         self.menuAppearanceObserver = nil
         self.blinkTask?.cancel()

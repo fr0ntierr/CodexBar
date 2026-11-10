@@ -10,13 +10,6 @@ extension StatusItemController {
     }
 }
 
-enum LoginNotificationLogic {
-    static func notificationCopy(providerName: String) -> (title: String, body: String) {
-        (
-            L("login_success_notification_title", providerName),
-            L("login_success_notification_body"))
-    }
-}
 
 extension StatusItemController {
     func setSettingsOpenHandler(_ handler: @escaping @MainActor (SettingsPane?) -> Void) {
@@ -235,12 +228,6 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
                     for: provider,
                     refreshOpenMenusWhenComplete: true,
                     interaction: .userInitiated)
-            } else if let provider {
-                await self.withProviderInteraction(.userInitiated) {
-                    await self.store.refreshUserPlugin(provider)
-                    guard !Task.isCancelled, !self.hasPreparedForAppShutdown else { return }
-                    self.refreshOpenMenusAfterUserPluginRefresh(provider)
-                }
             } else {
                 await self.performStoreRefresh(
                     enrichmentMode: .forcedBackground,
@@ -332,17 +319,6 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
         }
     }
 
-    @objc func refreshAugmentSession() {
-        Task {
-            await self.store.forceRefreshAugmentSession()
-            // Also trigger a full refresh to update the menu and clear any stale errors
-            await ProviderInteractionContext.$current.withValue(.userInitiated) {
-                await self.store.refresh(forceTokenUsage: false)
-            }
-            self.refreshOpenMenusAfterExplicitStoreAction()
-        }
-    }
-
     @objc func installUpdate() {
         self.updater.installUpdate()
     }
@@ -351,20 +327,7 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
         self.updater.checkForUpdates(nil)
     }
 
-    func userPluginDashboardURL(for instanceID: ProviderInstanceID) -> URL? {
-        guard instanceID.firstPartyProvider == nil,
-              let plugin = UserProviderPluginRegistry.plugin(for: instanceID) else { return nil }
-        return plugin.approvedDashboardURL(
-            settings: self.settings.pluginConfig(instanceID)?.pluginSettings ?? [:],
-            approvalStore: self.store.pluginApprovalStore)
-    }
-
     @objc func openDashboard() {
-        if let instanceID = self.lastMenuProvider, instanceID.firstPartyProvider == nil {
-            guard let url = self.userPluginDashboardURL(for: instanceID) else { return }
-            NSWorkspace.shared.open(url)
-            return
-        }
         // Provider-specific by design: Codex remains the historical action fallback when no provider is selected.
         let preferred = self.lastMenuProvider?.firstPartyProvider
             ?? (self.store.isEnabled(.codex) ? .codex : self.store.enabledFirstPartyProviders().first)
@@ -378,56 +341,6 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
         for provider: UsageProvider,
         environment: [String: String] = ProcessInfo.processInfo.environment) -> URL?
     {
-        // Provider-specific by design: these dashboards depend on region, source label, scope, or subscription plan.
-        if provider == .kimi {
-            return self.settings.kimiRegion.consoleURL
-        }
-        if provider == .alibaba {
-            return self.settings.alibabaCodingPlanAPIRegion.dashboardURL
-        }
-        if provider == .alibabatokenplan {
-            return AlibabaTokenPlanUsageFetcher.dashboardURL(
-                region: self.settings.alibabaTokenPlanAPIRegion,
-                environment: environment)
-        }
-        if provider == .minimax {
-            return self.settings.minimaxAPIRegion.dashboardURL
-        }
-
-        if provider == .opencodego {
-            return self.settings.opencodegoDashboardURL
-        }
-
-        if provider == .wayfinder {
-            return WayfinderProviderImplementation.dashboardURL(
-                settings: self.settings,
-                environment: environment)
-        }
-
-        if provider == .zai {
-            return ZaiEndpointRouter.resolveDashboardURL(
-                region: self.settings.zaiAPIRegion,
-                environment: environment,
-                usageScope: self.settings.zaiEffectiveUsageScope())
-        }
-
-        if provider == .qoder {
-            return QoderProviderDescriptor.dashboardURL(
-                settings: self.settings.resolvedCookieSettings(provider: provider, tokenOverride: nil),
-                sourceLabel: self.store.sourceLabel(for: .qoder))
-        }
-
-        if provider == .siliconflow {
-            return SiliconFlowProviderImplementation.dashboardURL(
-                settings: self.settings,
-                environment: environment)
-        }
-
-        // Provider-specific by design: the successful Helmcode snapshot owns the detected tenant.
-        if provider == .helmcode {
-            return HelmcodeProviderDescriptor.dashboardURL(snapshot: self.store.snapshot(for: provider.instanceID))
-        }
-
         let meta = self.store.metadata(for: provider)
         let urlString: String? = if provider == .claude, self.store.isClaudeSubscription() {
             meta.subscriptionDashboardURL ?? meta.dashboardURL
@@ -932,29 +845,5 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
         return "\(trimmed[..<idx])…"
     }
 
-    func postLoginNotification(for provider: UsageProvider) {
-        let name = ProviderDescriptorRegistry.descriptor(for: provider).metadata.displayName
-        let (title, body) = LoginNotificationLogic.notificationCopy(providerName: name)
-        AppNotifications.shared.post(idPrefix: "login-\(provider.rawValue)", title: title, body: body)
-    }
-
-    func presentCursorLoginResult(_ result: CursorLoginRunner.Result) {
-        switch result.outcome {
-        case .success:
-            return
-        case .cancelled:
-            // User closed the window; no alert needed
-            return
-        case let .failed(message):
-            self.presentLoginAlert(title: L("Cursor login failed"), message: message)
-        }
-    }
-
-    func describe(_ outcome: CursorLoginRunner.Result.Outcome) -> String {
-        switch outcome {
-        case .success: "success"
-        case .cancelled: "cancelled"
-        case let .failed(message): "failed(\(message))"
-        }
-    }
+    func postLoginNotification(for provider: UsageProvider) {}
 }

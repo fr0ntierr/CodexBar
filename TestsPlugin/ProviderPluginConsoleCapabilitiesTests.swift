@@ -178,7 +178,7 @@ struct ProviderPluginConsoleCapabilitiesTests {
     {
         try ProviderPluginRuntime(
             source: """
-            defineProvider({ id: 'qwencloud', name: 'Fixture', endpoints: ['https://console.example.com'], settings: [],
+            defineProvider({ id: 'claude', name: 'Fixture', endpoints: ['https://console.example.com'], settings: [],
               async fetchUsage(ctx) { \(body) }
             });
             """,

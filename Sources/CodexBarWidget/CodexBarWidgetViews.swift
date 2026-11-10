@@ -709,7 +709,7 @@ struct WidgetBalanceLine: Equatable {
 enum WidgetBalanceFormatter {
     static func providerBalance(for entry: WidgetSnapshot.ProviderEntry) -> WidgetBalanceLine? {
         // Provider-specific by design: these providers publish their widget value through the balance-text field.
-        guard entry.provider == .deepseek || entry.provider == .openrouter,
+        guard entry.provider == .deepseek,
               let value = entry.balanceText?.trimmingCharacters(in: .whitespacesAndNewlines),
               !value.isEmpty
         else { return nil }
@@ -717,12 +717,7 @@ enum WidgetBalanceFormatter {
     }
 
     static func extraUsageCost(for entry: WidgetSnapshot.ProviderEntry) -> ProviderCostSnapshot? {
-        // Provider-specific by design: Devin encodes its extra-usage balance as a named provider-cost period.
-        guard entry.provider == .devin,
-              let cost = entry.providerCost,
-              cost.period == "Extra usage balance"
-        else { return nil }
-        return cost
+        nil
     }
 
     static func extraUsageBalance(for entry: WidgetSnapshot.ProviderEntry) -> WidgetBalanceLine? {

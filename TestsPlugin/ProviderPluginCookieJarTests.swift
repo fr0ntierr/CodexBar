@@ -15,7 +15,7 @@ struct ProviderPluginCookieJarTests {
     {
         let broker = ProviderInteractionContext.$current.withValue(.userInitiated) {
             ProviderPluginCookieBroker(
-                provider: .longcat,
+                provider: .claude,
                 domains: ["example.test"],
                 settings: .init(cookieSource: .auto, manualCookieHeader: nil),
                 batches: { _, _ in nil },
@@ -190,7 +190,7 @@ struct ProviderPluginCookieJarTests {
     {
         try ProviderPluginRuntime(
             source: """
-            defineProvider({id: "longcat", name: "Fixture", settings: [], endpoints: ["https://example.test", "https://other.test", "https://example.test:444"],
+            defineProvider({id: "claude", name: "Fixture", settings: [], endpoints: ["https://example.test", "https://other.test", "https://example.test:444"],
               capabilities: ["browser-cookies", "http-status"], cookieDomains: ["example.test"],
               cookiePolicy: {selection: "request-url", cache: "nonpersistent"},
               async fetchUsage(ctx) { \(script) }
@@ -233,7 +233,7 @@ struct ProviderPluginCookieJarTests {
     func `cookie policy rejects unsupported contracts`(policy: String, engine: ProviderPluginEngineKind) {
         #expect(throws: ProviderPluginError.self) {
             try ProviderPluginRuntime(source: """
-            defineProvider({id:'longcat',name:'Fixture',settings:[],endpoints:['https://example.test'],
+            defineProvider({id:'claude',name:'Fixture',settings:[],endpoints:['https://example.test'],
               capabilities:['browser-cookies'],cookieDomains:['example.test'],cookiePolicy:\(policy),
               async fetchUsage(){return {primary:{usedPercent:1}};}});
             """, engine: engine)

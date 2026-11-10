@@ -264,49 +264,6 @@ extension StatusItemController {
         }
         let selected = self.primaryProviderForUnifiedIcon()
         guard let provider = selected.firstPartyProvider else {
-            guard let plugin = UserProviderPluginRegistry.plugin(for: selected) else { return false }
-            let snapshot = self.store.menuBarSnapshot(for: selected)
-            let showUsed = self.settings.usageBarsShowUsed
-            let lanes = Self.pluginMeterPercents(snapshot: snapshot, showUsed: showUsed)
-            let showBrand = self.settings.menuBarShowsBrandIconWithPercent
-            // Returning to a built-in provider must redraw even if its last quota is unchanged.
-            self.lastAppliedMergedIconRenderSignature = nil
-            if showBrand, let snapshot, !snapshot.menuBarItems.isEmpty {
-                let elements = PluginMenuBarSummaryRenderer.elements(snapshot: snapshot, showUsed: showUsed)
-                let options = PluginMenuBarSummaryRenderer.Options(
-                    sourceHash: plugin.sourceHash,
-                    monospaced: self.settings.menuBarLayoutMonospacedDigits,
-                    highContrast: self.shouldUseHighContrastStatusItemContent,
-                    appearance: button.effectiveAppearance.name.rawValue)
-                let rendered = self.menuBarLayoutRenderer.pluginSummary.render(
-                    elements: elements, options: options, fallbackIcon: {
-                        Self.userPluginSwitcherIcon(for: plugin, snapshot: nil, brandIcon: self.brandIcon)
-                    })
-                let cached = button.image === rendered.statusImage
-                    && (rendered.statusImage != nil || button.attributedTitle.isEqual(to: rendered.attributedTitle))
-                self.statusItem.length = Self.applyMenuBarLayoutContent(
-                    rendered, for: button, gap: self.settings.menuBarLayoutGap)
-                self.noteIconPerfRender(skipped: cached)
-                return cached
-            }
-            let image = showBrand ? self.userPluginSwitcherIcon(for: plugin) : IconRenderer.makeIcon(
-                primaryRemaining: lanes.primary,
-                weeklyRemaining: lanes.secondary,
-                creditsRemaining: nil,
-                stale: self.store.errors[selected] != nil,
-                style: .combined,
-                hideCritters: true)
-            if let result = self.applyPluginMenuBarLayout(instanceID: selected, icon: image) {
-                self.noteIconPerfRender(skipped: result)
-                return result
-            }
-            self.statusItem.length = NSStatusItem.variableLength
-            self.setButtonContent(
-                image: image,
-                title: nil,
-                tint: nil,
-                for: button)
-            self.noteIconPerfRender(skipped: false)
             return false
         }
         return self.applyIcon(for: provider, phase: phase, statusItem: self.statusItem, merged: true)
@@ -538,9 +495,7 @@ extension StatusItemController {
     }
 
     private func loadingBlinkAmount(for provider: UsageProvider, style: IconStyle, phase: Double?) -> CGFloat {
-        guard style == .warp, let phase else { return self.blinkAmount(for: provider) }
-        let normalized = (sin(phase * 3) + 1) / 2
-        return CGFloat(max(0, min(normalized, 1)))
+        self.blinkAmount(for: provider)
     }
 
     static func iconSignatureValue(_ value: Double?) -> String {
@@ -569,15 +524,10 @@ extension StatusItemController {
                 primary: showUsed ? metricWindow.usedPercent : metricWindow.remainingPercent,
                 secondary: nil)
         }
-        // Provider-specific by design: Mistral's balance/spend text replaces percentage lanes in its icon.
-        if provider == .mistral {
-            return (primary: nil, secondary: nil)
-        }
         return IconRemainingResolver.resolvedPercents(
             snapshot: snapshot,
             style: style,
-            showUsed: showUsed,
-            secondaryOverrideWindowID: self.settings.copilotIconSecondaryWindowOverrideID(snapshot: snapshot))
+            showUsed: showUsed)
     }
 
     private func menuBarMetricWindowForIconOverride(
@@ -706,11 +656,6 @@ extension StatusItemController {
     }
 
     private func setButtonContent(image: NSImage, title: String?, tint: NSColor?, for button: NSStatusBarButton) {
-        if let label = self.menuBarLayoutRenderer.pluginSummary.lastAccessibilityLabel,
-           button.accessibilityTitle() == label
-        {
-            button.setAccessibilityTitle(nil)
-        }
         let image = tint.map { MenuBarLayoutRenderer.attachmentImage(image, tint: $0, isMonochrome: false) } ?? image
         let isDebugApp = Self.isDebugApp(bundleIdentifier: Bundle.main.bundleIdentifier)
         let value = Self.buttonTitle(
@@ -778,26 +723,12 @@ extension StatusItemController {
     {
         let mode = self.settings.menuBarDisplayMode
         let preference = self.settings.menuBarMetricPreference(for: provider, snapshot: snapshot)
-        // Provider-specific by design: legacy preferences select balance text before quota and display modes.
-        let usesBalance = switch provider {
-        case .openrouter: preference == .automatic
-        case .mimo: snapshot?.primary == nil || preference == .secondary
-        case .opencodego, .devpass: snapshot?.primary == nil && snapshot?.secondary == nil
-        case .mistral: self.menuBarMetricWindow(for: provider, snapshot: snapshot, now: now) == nil
-        default: !ProviderDescriptorRegistry.descriptor(for: provider).presentation.menuBarBalanceUsesPrepaidCost
-        }
+        let usesBalance = !ProviderDescriptorRegistry.descriptor(for: provider).presentation.menuBarBalanceUsesPrepaidCost
         if usesBalance, let balance = MenuBarLayoutBalanceResolver.balance(provider: provider, snapshot: snapshot) {
             return balance
         }
-        if provider == .kiro {
-            return self.kiroMenuBarText(
-                provider: provider,
-                snapshot: snapshot,
-                now: now)
-        }
         if mode != .resetTime,
            self.settings.menuBarMetricPreference(for: provider, snapshot: snapshot) == .extraUsage,
-           provider != .cursor || mode == .pace,
            let spend = Self.extraUsageSpendDisplayText(snapshot: snapshot)
         {
             return spend
@@ -888,9 +819,7 @@ extension StatusItemController {
         automatic: MenuBarLayoutRenderWindow?,
         showsOptionalCredits: Bool = true) -> String?
     {
-        // Provider-specific by design: DeepInfra's real billing window has no balance detail.
         let balanceOnly = provider == .deepseek
-            || (provider == .deepinfra && automatic?.resetDescription != nil && automatic?.resetsAt == nil)
         guard automatic == nil || balanceOnly else { return nil }
         return MenuBarLayoutBalanceResolver.balance(
             provider: provider,
@@ -909,124 +838,6 @@ extension StatusItemController {
             return nil
         }
         return UsageFormatter.currencyString(cost.used, currencyCode: cost.currencyCode)
-    }
-
-    private func kiroMenuBarText(provider: UsageProvider, snapshot: UsageSnapshot?, now: Date) -> String? {
-        let mode = self.settings.menuBarDisplayMode
-        let text = Self.kiroDisplayText(
-            snapshot: snapshot,
-            mode: self.settings.kiroMenuBarDisplayMode,
-            showUsed: self.settings.usageBarsShowUsed)
-        guard !self.menuBarUsageSource(for: provider).isFleet,
-              mode == .pace || mode == .both, let text else { return text }
-        guard let paceText = self.store.menuBarLayoutPaceText(
-            provider: provider,
-            window: snapshot?.primary,
-            dataConfidence: snapshot?.dataConfidence ?? .unknown,
-            now: now)
-        else { return text }
-        return mode == .pace ? paceText : "\(text) · \(paceText)"
-    }
-
-    nonisolated static func kiroDisplayText(
-        snapshot: UsageSnapshot?,
-        mode: KiroMenuBarDisplayMode,
-        showUsed: Bool)
-        -> String?
-    {
-        guard mode != .hidden else { return nil }
-        guard let snapshot else {
-            return MenuBarDisplayText.percentText(window: snapshot?.primary, showUsed: showUsed)
-        }
-        let percentText = MenuBarDisplayText.percentText(
-            window: snapshot.primary,
-            showUsed: showUsed)
-        let creditsLeft = snapshot.detailRow(label: "Credits left")?.value
-        let creditsUsed = snapshot.detailRow(label: "Credits used")?.value
-        let creditsTotal = snapshot.detailRow(label: "Credits total")?.value
-        let usedTotal = [creditsUsed, creditsTotal].compactMap(\.self).joined(separator: " / ")
-
-        switch mode {
-        case .automatic, .creditsLeft:
-            if let creditsLeft, creditsTotal != "0" {
-                return creditsLeft
-            }
-            return percentText
-        case .hidden:
-            return nil
-        case .percentLeft:
-            return MenuBarDisplayText.percentText(window: snapshot.primary, showUsed: false)
-        case .creditsAndPercent:
-            guard creditsTotal != "0" else { return percentText }
-            guard let percentText else { return creditsLeft }
-            return creditsLeft.map { "\($0) · \(percentText)" } ?? percentText
-        case .usedAndTotal:
-            guard creditsTotal != "0" else { return percentText }
-            return usedTotal.isEmpty ? percentText : usedTotal
-        case .overageCreditsWhenExhausted:
-            return self.kiroOverageDisplayText(
-                snapshot: snapshot,
-                format: .credits,
-                fallback: creditsLeft ?? percentText,
-                percentFallback: percentText)
-        case .overageCostWhenExhausted:
-            return self.kiroOverageDisplayText(
-                snapshot: snapshot,
-                format: .cost,
-                fallback: creditsLeft ?? percentText,
-                percentFallback: percentText)
-        case .overageCreditsAndCostWhenExhausted:
-            return self.kiroOverageDisplayText(
-                snapshot: snapshot,
-                format: .creditsAndCost,
-                fallback: creditsLeft ?? percentText,
-                percentFallback: percentText)
-        }
-    }
-
-    private enum KiroOverageDisplayFormat {
-        case credits
-        case cost
-        case creditsAndCost
-    }
-
-    private nonisolated static func kiroOverageDisplayText(
-        snapshot: UsageSnapshot,
-        format: KiroOverageDisplayFormat,
-        fallback: String?,
-        percentFallback: String?)
-        -> String?
-    {
-        guard snapshot.detailRow(label: "Credits total")?.value != "0" else { return percentFallback }
-        guard snapshot.detailRow(label: "Credits left")?.value == "0",
-              snapshot.detailRow(label: "Overages")?.value
-                  .trimmingCharacters(in: .whitespacesAndNewlines)
-                  .lowercased()
-                  .hasPrefix("enabled") == true
-        else {
-            return fallback
-        }
-
-        let credits = snapshot.detailRow(label: "Overage usage").map { row in
-            let suffix = " credits"
-            return row.value.hasSuffix(suffix)
-                ? L("%@ over", String(row.value.dropLast(suffix.count))) : row.value
-        }
-        let cost = snapshot.detailRow(label: "Overage cost").map { L("%@ over", $0.value) }
-
-        switch format {
-        case .credits:
-            return credits ?? cost ?? fallback
-        case .cost:
-            return cost ?? credits ?? fallback
-        case .creditsAndCost:
-            if let credits, let cost {
-                let creditsValue = credits.replacingOccurrences(of: " over", with: "")
-                let costValue = cost.replacingOccurrences(of: " over", with: "")
-                return "\(creditsValue) · \(costValue)"
-            }
-            return credits ?? cost ?? fallback
-        }
     }
 
     /// Resolves the session (5h) and weekly (7d) lanes for the combined "Session + Weekly" menu-bar
@@ -1148,10 +959,6 @@ extension StatusItemController {
         if let projection {
             return projection.menuBarSelectableRateWindow(for: .weekly)
         }
-        // Provider-specific by design: Abacus publishes its weekly semantic window in the primary lane.
-        if provider == .abacus {
-            return snapshot?.primary
-        }
         if let combinedLanes {
             return combinedLanes.weekly
         }
@@ -1204,11 +1011,9 @@ extension StatusItemController {
         let overview = self.settings.resolvedMergedOverviewProviders(
             activeProviders: self.overviewProviderIDs(enabledProviders: active),
             maxVisibleProviders: SettingsStore.mergedOverviewProviderLimit)
-        let allowsPlugins = self.shouldMergeIcons && self.settings.unifiedIconSource == .currentSelection
-        let localEnabled = Set(self.store.enabledProviders())
         let enabled = self.store.enabledProvidersForDisplay().filter { instanceID in
-            if let provider = instanceID.firstPartyProvider { return self.isEnabled(provider) }
-            return allowsPlugins && localEnabled.contains(instanceID)
+            guard let provider = instanceID.firstPartyProvider else { return false }
+            return self.isEnabled(provider)
         }
         if self.settings.unifiedIconSource == .highestUsage, self.shouldMergeIcons {
             let candidates = overview.compactMap(\.firstPartyProvider)
@@ -1294,10 +1099,6 @@ extension StatusItemController {
 
         let isStale = self.menuBarIsStale(for: provider)
         let hasSatisfiedUsageFetch = self.store.hasSatisfiedUsageFetch(for: provider)
-        // Provider-specific by design: Warp animates while its first remote refresh is still in flight.
-        if provider == .warp, !hasSatisfiedUsageFetch, self.store.refreshingProviders.contains(provider.instanceID) {
-            return true
-        }
         return !hasSatisfiedUsageFetch && !isStale
     }
 

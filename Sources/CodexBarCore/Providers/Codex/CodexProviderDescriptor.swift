@@ -55,7 +55,6 @@ public enum CodexProviderDescriptor {
                 ],
                 debugPane: ProviderDebugPaneCapabilities(
                     probeLogOrder: 0,
-                    notificationSimulationOrder: 0,
                     errorSimulationOrder: 0),
                 browserCookieOrder: self.browserCookieOrder
                     ?? ProviderBrowserCookieDefaults.defaultImportOrder,

@@ -307,14 +307,14 @@ struct ProviderIconResourcesTests {
         ProviderBrandIcon.resetCacheForTesting()
     }
 
-    @Test(arguments: [UsageProvider.cursor, .pi, .openai, .azureopenai])
+    @Test(arguments: [UsageProvider.openai])
     func `brand requests without curated assets retain adaptive templates`(provider: UsageProvider) throws {
         let image = try #require(ProviderBrandIcon.image(for: provider, style: .brand))
         #expect(image.isTemplate)
         #expect(image.size == NSSize(width: 18, height: 18))
     }
 
-    @Test(arguments: [UsageProvider.claude, .codex, .antigravity, .mistral, .muse, .bedrock, .vertexai])
+    @Test(arguments: [UsageProvider.claude, .codex, .antigravity, .deepseek, .gemini])
     func `curated brand resources render color and transparent padding`(provider: UsageProvider) throws {
         let image = try #require(ProviderBrandIcon.image(for: provider, style: .brand))
         let bitmap = try #require(NSBitmapImageRep(

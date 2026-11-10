@@ -68,7 +68,7 @@ struct CodexBarApp: App {
         let storedLevel = CodexBarLog.parseLevel(UserDefaults.standard.string(forKey: "debugLogLevel")) ?? .verbose
         let level = CodexBarLog.parseLevel(env["CODEXBAR_LOG_LEVEL"]) ?? storedLevel
         CodexBarLog.bootstrapIfNeeded(.init(
-            destination: .oslog(subsystem: "com.steipete.codexbar"),
+            destination: .oslog(subsystem: "com.steipete.codexbarlite"),
             level: level,
             json: false))
 
@@ -77,7 +77,7 @@ struct CodexBarApp: App {
         let gitCommit = Bundle.main.object(forInfoDictionaryKey: "CodexGitCommit") as? String ?? "unknown"
         let buildTimestamp = Bundle.main.object(forInfoDictionaryKey: "CodexBuildTimestamp") as? String ?? "unknown"
         CodexBarLog.logger(LogCategories.app).info(
-            "CodexBar starting",
+            "CodexBarLite starting",
             metadata: [
                 "version": version,
                 "build": build,
@@ -400,7 +400,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     let updaterController: UpdaterProviding = makeUpdaterController()
-    let cloudSyncState = CloudSyncState()
     private let confettiOverlayController = ScreenConfettiOverlayController()
     private let confettiLogger = CodexBarLog.logger(LogCategories.confetti)
     private let dockIconController = DockIconController.shared
@@ -415,7 +414,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var preferencesSelection: PreferencesSelection?
     private var managedCodexAccountCoordinator: ManagedCodexAccountCoordinator?
     private var codexAccountPromotionCoordinator: CodexAccountPromotionCoordinator?
-    private var cloudSyncCoordinator: CloudSyncCoordinator?
     private var settingsWindowController: SettingsWindowController?
     private var pendingUpdateSettingsOpen = false
     private lazy var placeholderSettingsWindowGuard = PlaceholderSettingsWindowGuard(
@@ -448,11 +446,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.preferencesSelection = dependencies.selection
         self.managedCodexAccountCoordinator = dependencies.managedCodexAccountCoordinator
         self.codexAccountPromotionCoordinator = dependencies.codexAccountPromotionCoordinator
-        self.cloudSyncCoordinator = CloudSyncCoordinator(settings: dependencies.settings, state: self.cloudSyncState)
         self.settingsWindowController = SettingsWindowController(
             settings: dependencies.settings,
             store: dependencies.store,
-            cloudSyncState: self.cloudSyncState,
             updater: self.updaterController,
             selection: dependencies.selection,
             managedCodexAccountCoordinator: dependencies.managedCodexAccountCoordinator,
@@ -469,14 +465,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         MenuBarStatusItemWindowProbe.trace("will-finish-launching")
-        AppNotifications.shared.configureUpdateAction { [weak self] in
-            guard let self else { return }
-            if self.settingsWindowController == nil {
-                self.pendingUpdateSettingsOpen = true
-            } else {
-                self.openSettings(pane: .about)
-            }
-        }
         self.configureAppIconForMacOSVersion()
         // The SwiftUI `Settings` scene is an empty placeholder; macOS otherwise presents it at launch.
         self.placeholderSettingsWindowGuard.start()
@@ -501,13 +489,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.scheduleSettingsApplicationMenuValidation(
             missingItemRetriesRemaining: Self.settingsMenuReadinessRetryCount,
             fallbackVerificationRetriesRemaining: Self.settingsMenuFallbackVerificationRetryCount)
-        self.cloudSyncCoordinator?.start()
-        Task { await self.settings?.httpServer.startSaved() }
         Task { @MainActor [weak self] in
             await Task.yield()
             guard let settings = self?.settings else { return }
             AdaptiveActivityConsentPresenter.presentIfNeeded(settings: settings)
-            AppNotifications.shared.requestAuthorizationOnStartup()
             // A persisted non-USD choice opts into the daily exchange-rate refresh. The service
             // returns before networking for the default USD setting and Auto.
             guard CurrencyExchange.requiresLiveRates(
@@ -539,13 +524,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard !self.isWaitingForConfigPersistence else { return .terminateLater }
-        let serverStop = self.settings?.httpServer.stopForTermination()
         let save = self.settings?.persistPendingConfigForTermination()
-        guard save != nil || serverStop != nil else { return .terminateNow }
+        guard save != nil else { return .terminateNow }
         self.isWaitingForConfigPersistence = true
         Task.detached {
             await save?.value
-            await serverStop?.value
             // NSApplication may be inside a modal loop entered from the main dispatch queue.
             // A MainActor task cannot reliably resume there; deliver the reply on that run loop.
             RunLoop.main.perform(inModes: [.default, .modalPanel]) {
@@ -560,7 +543,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        self.cloudSyncCoordinator?.stop()
         self.memoryPressureMonitor.stop()
         #if DEBUG
         self.removeDebugMemoryPressureObserver()
@@ -572,7 +554,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
-        self.cloudSyncCoordinator?.applicationDidBecomeActive()
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        self.openSettings(pane: nil)
+        return true
     }
 
     func runProviderLoginFlow(_ provider: UsageProvider) async {
@@ -771,7 +757,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             self.statusController = statusController
             if let concreteStatusController = statusController as? StatusItemController {
-                concreteStatusController.cloudSyncState = self.cloudSyncState
                 MenuSwitchFlickerProbe.startIfRequested(controller: concreteStatusController)
             }
             return

@@ -114,14 +114,14 @@ struct ProviderPluginPersistentCookieSecurityTests {
         ] {
             #expect(throws: ProviderPluginError.self) {
                 try ProviderPluginRuntime(source: """
-                defineProvider({id: 'notion', name: 'Fixture', settings: [], endpoints: ['https://example.test'],
+                defineProvider({id: 'claude', name: 'Fixture', settings: [], endpoints: ['https://example.test'],
                   snapshotPolicy: \(policy), fetchUsage() {return {empty:true};}});
                 """, engine: engine)
             }
         }
         for number in ["NaN", "Infinity", "'120'"] {
             let runtime = try ProviderPluginRuntime(source: """
-            defineProvider({id: 'notion', name: 'Fixture', settings: [], endpoints: ['https://example.test'],
+            defineProvider({id: 'claude', name: 'Fixture', settings: [], endpoints: ['https://example.test'],
               snapshotPolicy: {percent: 'preserve-overage'}, fetchUsage() {return {primary:{usedPercent:\(number)}};}});
             """, engine: engine)
             await #expect(throws: ProviderPluginError.self) { try await runtime.fetchUsage() }
@@ -134,7 +134,7 @@ struct ProviderPluginPersistentCookieSecurityTests {
         body: String) throws -> ProviderPluginRuntime
     {
         try ProviderPluginRuntime(source: """
-        defineProvider({id: 'notion', name: 'Fixture', settings: [], endpoints: ['https://example.test'],
+        defineProvider({id: 'claude', name: 'Fixture', settings: [], endpoints: ['https://example.test'],
           capabilities: ['browser-cookies'], cookieDomains: ['example.test', 'other.test'],
           cookiePolicy: \(policy), async fetchUsage(ctx) {\(body)}});
         """, engine: engine)

@@ -133,25 +133,6 @@ extension UsageStore {
             guard !windows.isEmpty else { return true }
             return windows.allSatisfy { $0.usedPercent >= 100 }
         }
-        if provider == .copilot,
-           effectivePreference == .automatic,
-           let primary = snapshot.primary,
-           let secondary = snapshot.secondary
-        {
-            // In automatic mode Copilot can have one depleted lane while another still has quota.
-            return primary.usedPercent >= 100 && secondary.usedPercent >= 100
-        }
-        if provider == .cursor,
-           effectivePreference == .automatic
-        {
-            let percents = [
-                snapshot.primary?.usedPercent,
-                snapshot.secondary?.usedPercent,
-                snapshot.tertiary?.usedPercent,
-            ].compactMap(\.self)
-            guard !percents.isEmpty else { return true }
-            return percents.allSatisfy { $0 >= 100 }
-        }
         if effectivePreference == .automatic,
            MenuBarMetricWindowResolver.automaticSelectionPrioritizesExhaustedWindow(for: provider)
         {

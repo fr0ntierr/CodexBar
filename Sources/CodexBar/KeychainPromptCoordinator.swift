@@ -23,21 +23,6 @@ private enum KeychainPromptMessage {
     static let claudeCookie =
         "CodexBar will ask macOS Keychain for your Claude cookie header " +
         "so it can fetch Claude web usage. Click OK to continue."
-    static let zaiToken =
-        "CodexBar will ask macOS Keychain for your z.ai API token " +
-        "so it can fetch usage. Click OK to continue."
-    static let syntheticToken =
-        "CodexBar will ask macOS Keychain for your Synthetic API key " +
-        "so it can fetch usage. Click OK to continue."
-    static let copilotToken =
-        "CodexBar will ask macOS Keychain for your GitHub Copilot token " +
-        "so it can fetch usage. Click OK to continue."
-    static let kimiToken =
-        "CodexBar will ask macOS Keychain for your Kimi auth token " +
-        "so it can fetch usage. Click OK to continue."
-    static let minimaxToken =
-        "CodexBar will ask macOS Keychain for your MiniMax API token " +
-        "so it can fetch usage. Click OK to continue."
 }
 
 struct KeychainPromptAlertModel: Equatable {
@@ -101,7 +86,7 @@ enum KeychainPromptCoordinator {
     static func isUnbundledCodexBarExecutable(_ executablePath: String) -> Bool {
         guard executablePath.hasPrefix("/") else { return false }
         let executableURL = URL(fileURLWithPath: executablePath).standardizedFileURL
-        return executableURL.lastPathComponent == "CodexBar"
+        return (executableURL.lastPathComponent == "CodexBar" || executableURL.lastPathComponent == "CodexBarLite")
             && !executableURL.pathComponents.contains(where: { $0.hasSuffix(".app") })
     }
 
@@ -127,28 +112,6 @@ enum KeychainPromptCoordinator {
             L(KeychainPromptMessage.codexCookie)
         case .claudeCookie:
             L(KeychainPromptMessage.claudeCookie)
-        case .cursorCookie:
-            L(KeychainPromptMessage.providerCookie, "Cursor")
-        case .opencodeCookie:
-            L(KeychainPromptMessage.providerCookie, "OpenCode")
-        case .factoryCookie:
-            L(KeychainPromptMessage.providerCookie, "Factory")
-        case .zaiToken:
-            L(KeychainPromptMessage.zaiToken)
-        case .syntheticToken:
-            L(KeychainPromptMessage.syntheticToken)
-        case .copilotToken:
-            L(KeychainPromptMessage.copilotToken)
-        case .kimiToken:
-            L(KeychainPromptMessage.kimiToken)
-        case .minimaxCookie:
-            L(KeychainPromptMessage.providerCookie, "MiniMax")
-        case .minimaxToken:
-            L(KeychainPromptMessage.minimaxToken)
-        case .augmentCookie:
-            L(KeychainPromptMessage.providerCookie, "Augment")
-        case .ampCookie:
-            L(KeychainPromptMessage.providerCookie, "Amp")
         }
         return self.alertModel(purpose: purpose)
     }

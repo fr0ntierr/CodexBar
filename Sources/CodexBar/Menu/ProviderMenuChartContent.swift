@@ -32,10 +32,24 @@ extension UsageMenuCardView.Model {
     }
 }
 
+private struct ProviderMenuChartSettingsKey: EnvironmentKey {
+    static let defaultValue: SettingsStore? = nil
+}
+
+private struct ProviderMenuChartSelectionKey: EnvironmentKey {
+    static let defaultValue: Binding<ProviderMenuChartMode>? = nil
+}
+
 extension EnvironmentValues {
-    @Entry var providerMenuChartSettings: SettingsStore?
+    var providerMenuChartSettings: SettingsStore? {
+        get { self[ProviderMenuChartSettingsKey.self] }
+        set { self[ProviderMenuChartSettingsKey.self] = newValue }
+    }
     /// Synchronous selection injection for native fitting-height and render proofs.
-    @Entry var providerMenuChartSelection: Binding<ProviderMenuChartMode>?
+    var providerMenuChartSelection: Binding<ProviderMenuChartMode>? {
+        get { self[ProviderMenuChartSelectionKey.self] }
+        set { self[ProviderMenuChartSelectionKey.self] = newValue }
+    }
 }
 
 extension InlineUsageDashboardModel {

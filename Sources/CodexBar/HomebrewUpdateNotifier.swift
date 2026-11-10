@@ -84,18 +84,10 @@ extension HomebrewUpdateNotifier.Dependencies {
         return Self(
             lastSubmittedVersion: { defaults.string(forKey: key) },
             saveSubmittedVersion: { defaults.set($0, forKey: key) },
-            post: { version, isCurrent, completion in
-                AppNotifications.shared.post(
-                    idPrefix: "homebrew-update",
-                    title: String(format: L("CodexBar %@ is available"), version),
-                    body: L("update_available_notification_body"),
-                    soundEnabled: false,
-                    identifier: Self.identifier(version: version),
-                    categoryIdentifier: AppNotifications.updateCategoryIdentifier,
-                    isCurrent: isCurrent,
-                    onCompletion: completion)
+            post: { _, _, completion in
+                completion(false)
             },
-            remove: { AppNotifications.shared.remove(identifier: Self.identifier(version: $0)) })
+            remove: { _ in })
     }
 
     private static func identifier(version: String) -> String {

@@ -60,17 +60,38 @@ func W(_ key: String, _ arguments: CVarArg...) -> String {
     return arguments.isEmpty ? value : String(format: value, locale: locale, arguments: arguments)
 }
 
+private struct WidgetUsageShowsUsedKey: EnvironmentKey {
+    static let defaultValue: Bool = false
+}
+
+private struct WidgetRenderingModeOverrideKey: EnvironmentKey {
+    static var defaultValue: WidgetRenderingMode? { nil }
+}
+
+private struct WidgetProviderSelectionOverrideKey: EnvironmentKey {
+    static var defaultValue: ((UsageProvider) -> Void)? { nil }
+}
+
 extension EnvironmentValues {
     /// Mirrors the app's "show used instead of remaining" preference into the tiles.
-    @Entry var widgetUsageShowsUsed: Bool = false
+    var widgetUsageShowsUsed: Bool {
+        get { self[WidgetUsageShowsUsedKey.self] }
+        set { self[WidgetUsageShowsUsedKey.self] = newValue }
+    }
 
     /// Snapshot-rendering seam. WidgetKit owns `widgetRenderingMode` and nothing outside a widget
     /// host can set it, so the tinted and clear appearances are unreachable from a preview without
     /// this. Always nil in the shipping widget.
-    @Entry var widgetRenderingModeOverride: WidgetRenderingMode?
+    var widgetRenderingModeOverride: WidgetRenderingMode? {
+        get { self[WidgetRenderingModeOverrideKey.self] }
+        set { self[WidgetRenderingModeOverrideKey.self] = newValue }
+    }
 
     /// Native previews keep selection local instead of writing shared widget preferences.
-    @Entry var widgetProviderSelectionOverride: ((UsageProvider) -> Void)?
+    var widgetProviderSelectionOverride: ((UsageProvider) -> Void)? {
+        get { self[WidgetProviderSelectionOverrideKey.self] }
+        set { self[WidgetProviderSelectionOverrideKey.self] = newValue }
+    }
 }
 
 // MARK: - Layout metrics
@@ -105,23 +126,12 @@ enum ProviderMonogram {
     /// Provider-specific by design: the widget-selectable providers get curated marks because a
     /// mechanical abbreviation collides (Codex/Copilot/Cursor/Claude all start with "C").
     private static let curated: [UsageProvider: String] = [
-        .alibaba: "AL",
-        .alibabatokenplan: "AT",
         .antigravity: "AG",
         .claude: "CL",
         .codex: "CX",
-        .copilot: "CP",
-        .cursor: "CU",
-        .devin: "DV",
+        .deepseek: "DS",
         .gemini: "GE",
-        .kilo: "KL",
-        .kimi: "KM",
-        .minimax: "MX",
-        .mistral: "MS",
-        .opencode: "OC",
-        .opencodego: "OG",
-        .qwencloud: "QW",
-        .zai: "ZA",
+        .openai: "OA",
     ]
 
     static func text(for provider: UsageProvider) -> String {

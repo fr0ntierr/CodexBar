@@ -254,8 +254,6 @@ final class SettingsStore {
     #endif
 
     @ObservationIgnored let userDefaults: UserDefaults
-    @ObservationIgnored lazy var httpServer = HTTPServerController(
-        configURL: self.configStore.fileURL.deletingLastPathComponent().appendingPathComponent("http-server.json"))
     @ObservationIgnored let configStore: CodexBarConfigStore
     @ObservationIgnored let antigravityOAuthCredentialsStore: AntigravityOAuthCredentialsStore
     @ObservationIgnored let keychainAccessPolicy: SettingsStoreKeychainAccessPolicy
@@ -310,33 +308,12 @@ final class SettingsStore {
     init(
         userDefaults: UserDefaults = .standard,
         configStore: CodexBarConfigStore = CodexBarConfigStore(),
-        zaiTokenStore: any ZaiTokenStoring = KeychainZaiTokenStore(),
-        syntheticTokenStore: any SyntheticTokenStoring = KeychainSyntheticTokenStore(),
         codexCookieStore: any CookieHeaderStoring = KeychainCookieHeaderStore(
             account: "codex-cookie",
             promptKind: .codexCookie),
         claudeCookieStore: any CookieHeaderStoring = KeychainCookieHeaderStore(
             account: "claude-cookie",
             promptKind: .claudeCookie),
-        cursorCookieStore: any CookieHeaderStoring = KeychainCookieHeaderStore(
-            account: "cursor-cookie",
-            promptKind: .cursorCookie),
-        opencodeCookieStore: any CookieHeaderStoring = KeychainCookieHeaderStore(
-            account: "opencode-cookie",
-            promptKind: .opencodeCookie),
-        factoryCookieStore: any CookieHeaderStoring = KeychainCookieHeaderStore(
-            account: "factory-cookie",
-            promptKind: .factoryCookie),
-        minimaxCookieStore: any MiniMaxCookieStoring = KeychainMiniMaxCookieStore(),
-        minimaxAPITokenStore: any MiniMaxAPITokenStoring = KeychainMiniMaxAPITokenStore(),
-        kimiTokenStore: any KimiTokenStoring = KeychainKimiTokenStore(),
-        augmentCookieStore: any CookieHeaderStoring = KeychainCookieHeaderStore(
-            account: "augment-cookie",
-            promptKind: .augmentCookie),
-        ampCookieStore: any CookieHeaderStoring = KeychainCookieHeaderStore(
-            account: "amp-cookie",
-            promptKind: .ampCookie),
-        copilotTokenStore: any CopilotTokenStoring = KeychainCopilotTokenStore(),
         tokenAccountStore: any ProviderTokenAccountStoring = FileTokenAccountStore(),
         antigravityOAuthCredentialsStore: AntigravityOAuthCredentialsStore = AntigravityOAuthCredentialsStore(),
         keychainAccessPolicy: SettingsStoreKeychainAccessPolicy = .defaultPolicy,
@@ -344,9 +321,6 @@ final class SettingsStore {
     {
         // Legacy credential migration must see the saved policy, including shared-defaults fallback.
         keychainAccessPolicy.setDisabled(Self.loadDebugDisableKeychainAccess(userDefaults: userDefaults))
-        if !Self.isRunningTests {
-            _ = UserProviderPluginRegistry.refresh()
-        }
         // Capture this before app-group/config migrations can create prior-installation state.
         let hadExistingConfig = (try? configStore.load()) != nil
         let hadPreviousInstallationState = hadExistingConfig || Self.hadPreviousAppLaunch(userDefaults: userDefaults)
@@ -373,19 +347,8 @@ final class SettingsStore {
             userDefaults.set(legacyOpenAIWebAccess, forKey: "openAIWebAccessEnabled")
         }
         let legacyStores = CodexBarConfigMigrator.LegacyStores(
-            zaiTokenStore: zaiTokenStore,
-            syntheticTokenStore: syntheticTokenStore,
             codexCookieStore: codexCookieStore,
             claudeCookieStore: claudeCookieStore,
-            cursorCookieStore: cursorCookieStore,
-            opencodeCookieStore: opencodeCookieStore,
-            factoryCookieStore: factoryCookieStore,
-            minimaxCookieStore: minimaxCookieStore,
-            minimaxAPITokenStore: minimaxAPITokenStore,
-            kimiTokenStore: kimiTokenStore,
-            augmentCookieStore: augmentCookieStore,
-            ampCookieStore: ampCookieStore,
-            copilotTokenStore: copilotTokenStore,
             tokenAccountStore: tokenAccountStore)
         let config: CodexBarConfig
         do {
@@ -437,7 +400,6 @@ final class SettingsStore {
         if performInitialProviderDetection {
             self.runInitialProviderDetectionIfNeeded()
         }
-        self.ensureAlibabaProviderAutoEnabledIfNeeded()
         self.applyTokenCostDefaultIfNeeded()
         if self.claudeUsageDataSource != .cli {
             if Self.isRunningTests {
@@ -552,7 +514,6 @@ extension SettingsStore {
         let menuBarLayoutOverridesRaw = Self.loadMenuBarLayoutOverrides(userDefaults: userDefaults)
         let rawVerticalAdjustment = userDefaults.object(forKey: "menuBarLayoutVerticalAdjustment") as? Int
         let menuBarLayoutVerticalAdjustment = max(-20, min(20, rawVerticalAdjustment ?? 0))
-        let copilotIconSecondaryWindowIDRaw = Self.loadCopilotIconSecondaryWindowIDRaw(userDefaults: userDefaults)
         let costUsageEnabled = userDefaults.object(forKey: "tokenCostUsageEnabled") as? Bool ?? false
         let costReportingPeriod = CostReportingPeriod.migrated(
             rawValue: userDefaults.string(forKey: CostReportingPeriod.defaultsKey),
@@ -573,10 +534,6 @@ extension SettingsStore {
             userDefaults.set(false, forKey: "codexExternalOAuthSourcesAllowed")
         }
         let backgroundWorkLowPowerModePreference = Self.loadLowPowerModePreference(userDefaults: userDefaults)
-        let iCloudSyncDeviceID = userDefaults.string(forKey: "iCloudSyncDeviceID") ?? UUID().uuidString.lowercased()
-        if userDefaults.string(forKey: "iCloudSyncDeviceID") == nil {
-            userDefaults.set(iCloudSyncDeviceID, forKey: "iCloudSyncDeviceID")
-        }
         if userDefaults.object(forKey: "agentSessionsRemoteEnabled") == nil {
             // Preserve existing remote monitoring, but keep first-time Agent Sessions local-only.
             userDefaults.set(userDefaults.bool(forKey: "agentSessionsEnabled"), forKey: "agentSessionsRemoteEnabled")
@@ -638,8 +595,6 @@ extension SettingsStore {
                 ?? MenuBarDisplayMode.percent.rawValue,
             menuBarShowsResetTimeWhenExhausted: userDefaults.object(
                 forKey: "menuBarShowsResetTimeWhenExhausted") as? Bool ?? false,
-            kiroMenuBarDisplayModeRaw: userDefaults.string(forKey: "kiroMenuBarDisplayMode")
-                ?? KiroMenuBarDisplayMode.automatic.rawValue,
             historicalTrackingEnabled: userDefaults.object(forKey: "historicalTrackingEnabled") as? Bool ?? false,
             multiAccountMenuLayoutRaw: multiAccountMenuLayoutRaw,
             accountWidgetsEnabled: userDefaults.bool(forKey: "accountWidgetsEnabled"),
@@ -655,10 +610,6 @@ extension SettingsStore {
             menuBarLayoutGapRaw: userDefaults.string(forKey: "menuBarLayoutGap")
                 ?? MenuBarLayoutGap.regular.rawValue,
             menuBarLayoutVerticalAdjustment: menuBarLayoutVerticalAdjustment,
-            copilotBudgetExtrasEnabled: userDefaults.object(forKey: "copilotBudgetExtrasEnabled") as? Bool ?? false,
-            copilotIconSecondaryWindowIDRaw: copilotIconSecondaryWindowIDRaw,
-            copilotSeatCreditEntitlementRaw: userDefaults.object(
-                forKey: "copilotSeatCreditEntitlement") as? String ?? "",
             costUsageEnabled: costUsageEnabled,
             codexLocalSessionCostLedgerEnabled: userDefaults.object(
                 forKey: "codexLocalSessionCostLedgerEnabled") as? Bool ?? false,
@@ -736,12 +687,7 @@ extension SettingsStore {
             agentSessionsManualHosts: userDefaults.string(forKey: "agentSessionsManualHosts") ?? "",
             agentSessionsHideUnreachableHosts: userDefaults.object(
                 forKey: "agentSessionsHideUnreachableHosts") as? Bool ?? false,
-            preferredCurrencyCode: userDefaults.string(forKey: "preferredCurrencyCode") ?? "USD",
-            iCloudSyncEnabled: userDefaults.object(forKey: "iCloudSyncEnabled") as? Bool ?? false,
-            iCloudSyncIncludeSecrets: userDefaults.object(forKey: "iCloudSyncIncludeSecrets") as? Bool ?? true,
-            iCloudSyncSnapshotsEnabled: userDefaults.object(forKey: "iCloudSyncSnapshotsEnabled") as? Bool ?? true,
-            iCloudSyncShowFleetAccounts: userDefaults.object(forKey: "iCloudSyncShowFleetAccounts") as? Bool ?? true,
-            iCloudSyncDeviceID: iCloudSyncDeviceID)
+            preferredCurrencyCode: userDefaults.string(forKey: "preferredCurrencyCode") ?? "USD")
     }
 
     private static func hadPreviousAppLaunch(userDefaults: UserDefaults) -> Bool {
@@ -961,10 +907,6 @@ extension SettingsStore {
         return legacyShowAll ? MultiAccountMenuLayout.stacked.rawValue : MultiAccountMenuLayout.segmented.rawValue
     }
 
-    private static func loadCopilotIconSecondaryWindowIDRaw(userDefaults: UserDefaults) -> String {
-        userDefaults.string(forKey: "copilotIconSecondaryWindowID") ?? CopilotIconSecondaryWindowSelection.chat
-    }
-
     static func loadDebugDisableKeychainAccess(userDefaults: UserDefaults) -> Bool {
         self.loadDebugDisableKeychainAccess(
             userDefaults: userDefaults,
@@ -1051,8 +993,6 @@ extension SettingsStore {
         let metadata = ProviderDescriptorRegistry.metadata
         let defaults = UsageProvider.allCases.map { provider in
             (id: provider.instanceID, enabled: metadata[provider]?.defaultEnabled ?? false)
-        } + UserProviderPluginRegistry.all.map { plugin in
-            (id: plugin.manifest.id, enabled: true)
         }
         var enablement: [ProviderInstanceID: Bool] = [:]
         enablement.reserveCapacity(defaults.count)
@@ -1148,29 +1088,6 @@ extension SettingsStore {
         }
     }
 
-    func isPluginEnabled(_ instanceID: ProviderInstanceID) -> Bool {
-        self.providerEnablement[instanceID] ?? false
-    }
-
-    func setPluginEnabled(_ instanceID: ProviderInstanceID, enabled: Bool) {
-        self.updatePluginConfig(instanceID: instanceID) { $0.enabled = enabled }
-        if !enabled, self.selectedMenuProvider == instanceID {
-            self.selectedMenuProvider = nil
-        }
-    }
-
-    func pluginConfig(_ instanceID: ProviderInstanceID) -> ProviderConfig? {
-        self.configSnapshot.providerConfig(for: instanceID)
-    }
-
-    func updatePluginConfig(instanceID: ProviderInstanceID, mutate: (inout ProviderConfig) -> Void) {
-        self.updateConfig(reason: "plugin-\(instanceID.rawValue)", affectsBackgroundWork: true) { config in
-            var entry = config.providerConfig(for: instanceID) ?? ProviderConfig(id: instanceID, enabled: true)
-            mutate(&entry)
-            config.setProviderConfig(entry)
-        }
-    }
-
     func rerunProviderDetection() {
         self.runInitialProviderDetectionIfNeeded(force: true)
     }
@@ -1183,7 +1100,7 @@ extension SettingsStore {
 
         for rawValue in raw {
             guard let instanceID = ProviderInstanceID(rawValue: rawValue),
-                  instanceID.firstPartyProvider != nil || UserProviderPluginRegistry.plugin(for: instanceID) != nil
+                  instanceID.firstPartyProvider != nil
             else {
                 continue
             }
@@ -1197,24 +1114,8 @@ extension SettingsStore {
             seen = Set(ordered)
         }
 
-        if !seen.contains(.factory), let zaiIndex = ordered.firstIndex(of: .zai) {
-            ordered.insert(.factory, at: zaiIndex)
-            seen.insert(.factory)
-        }
-
-        if !seen.contains(.minimax), let zaiIndex = ordered.firstIndex(of: .zai) {
-            let insertIndex = ordered.index(after: zaiIndex)
-            ordered.insert(.minimax, at: insertIndex)
-            seen.insert(.minimax)
-        }
-
         for provider in UsageProvider.allCases where !seen.contains(provider.instanceID) {
             ordered.append(provider.instanceID)
-        }
-
-        for plugin in UserProviderPluginRegistry.all where !seen.contains(plugin.manifest.id) {
-            ordered.append(plugin.manifest.id)
-            seen.insert(plugin.manifest.id)
         }
 
         return ordered

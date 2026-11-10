@@ -4,12 +4,12 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_BUNDLE="${ROOT_DIR}/CodexBar.app"
-APP_PROCESS_PATTERN="CodexBar.app/Contents/MacOS/CodexBar"
-DEBUG_PROCESS_PATTERN="${ROOT_DIR}/.build/debug/CodexBar"
-RELEASE_PROCESS_PATTERN="${ROOT_DIR}/.build/release/CodexBar"
+APP_BUNDLE="${ROOT_DIR}/CodexBarLite.app"
+APP_PROCESS_PATTERN="CodexBarLite.app/Contents/MacOS/CodexBarLite"
+DEBUG_PROCESS_PATTERN="${ROOT_DIR}/.build/debug/CodexBarLite"
+RELEASE_PROCESS_PATTERN="${ROOT_DIR}/.build/release/CodexBarLite"
 LOCK_KEY="$(printf '%s' "${ROOT_DIR}" | shasum -a 256 | cut -c1-8)"
-LOCK_DIR="${TMPDIR:-/tmp}/codexbar-compile-and-run-${LOCK_KEY}"
+LOCK_DIR="${TMPDIR:-/tmp}/codexbarlite-compile-and-run-${LOCK_KEY}"
 LOCK_PID_FILE="${LOCK_DIR}/pid"
 WAIT_FOR_LOCK=0
 RUN_TESTS=0
@@ -165,7 +165,8 @@ kill_all_codexbar() {
     pgrep -f "${APP_PROCESS_PATTERN}" >/dev/null 2>&1 \
       || pgrep -f "${DEBUG_PROCESS_PATTERN}" >/dev/null 2>&1 \
       || pgrep -f "${RELEASE_PROCESS_PATTERN}" >/dev/null 2>&1 \
-      || pgrep -x "CodexBar" >/dev/null 2>&1
+      || pgrep -x "CodexBar" >/dev/null 2>&1 \
+      || pgrep -x "CodexBarLite" >/dev/null 2>&1
   }
 
   # Phase 1: request termination (give the app time to exit cleanly).
@@ -238,8 +239,8 @@ if [[ "${SIGNING_MODE:-adhoc}" == "adhoc" && "${CLEAR_ADHOC_KEYCHAIN}" == "1" ]]
   log "==> Clearing CodexBar keychain entries (adhoc signing)"
   # Clear both the legacy keychain store and the current cache service when developers explicitly want a clean reset
   # of CodexBar-owned keychain state for ad-hoc builds.
-  delete_keychain_service_items "com.steipete.CodexBar"
-  delete_keychain_service_items "com.steipete.codexbar.cache"
+  delete_keychain_service_items "com.steipete.CodexBarLite"
+  delete_keychain_service_items "com.steipete.codexbarlite.cache"
 elif [[ "${SIGNING_MODE:-adhoc}" == "adhoc" ]]; then
   log "==> Preserving CodexBar keychain entries (pass --clear-adhoc-keychain to reset adhoc keychain state)"
 fi

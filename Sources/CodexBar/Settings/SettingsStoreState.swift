@@ -44,7 +44,6 @@ struct SettingsDefaultsState {
     var menuBarHighContrastOnInactiveDisplays: Bool
     var menuBarDisplayModeRaw: String?
     var menuBarShowsResetTimeWhenExhausted: Bool
-    var kiroMenuBarDisplayModeRaw: String?
     var historicalTrackingEnabled: Bool
     var multiAccountMenuLayoutRaw: String
     var accountWidgetsEnabled: Bool
@@ -57,9 +56,6 @@ struct SettingsDefaultsState {
     var menuBarLayoutSizeRaw: String
     var menuBarLayoutGapRaw: String
     var menuBarLayoutVerticalAdjustment: Int
-    var copilotBudgetExtrasEnabled: Bool
-    var copilotIconSecondaryWindowIDRaw: String
-    var copilotSeatCreditEntitlementRaw: String
     var costUsageEnabled: Bool
     var codexLocalSessionCostLedgerEnabled: Bool
     var openCodeLocalHistoryEnabled: Bool
@@ -111,9 +107,4 @@ struct SettingsDefaultsState {
     var agentSessionsManualHosts: String
     var agentSessionsHideUnreachableHosts: Bool
     var preferredCurrencyCode: String
-    var iCloudSyncEnabled: Bool
-    var iCloudSyncIncludeSecrets: Bool
-    var iCloudSyncSnapshotsEnabled: Bool
-    var iCloudSyncShowFleetAccounts: Bool
-    var iCloudSyncDeviceID: String
 }

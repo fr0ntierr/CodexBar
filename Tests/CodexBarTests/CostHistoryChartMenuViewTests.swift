@@ -319,7 +319,7 @@ struct CostHistoryChartMenuViewTests {
         #expect(CostHistoryChartMenuView.detailOverflowHint(itemCount: 4) == nil)
     }
 
-    @Test(arguments: [UsageProvider.grok, .codex, .claude])
+    @Test(arguments: [UsageProvider.deepseek, .codex, .claude])
     func `token history shows observed names without inventing model totals`(provider: UsageProvider) {
         func entry(_ names: [String], breakdown: [CostUsageDailyReport.ModelBreakdown]? = nil)
             -> CostUsageDailyReport.Entry

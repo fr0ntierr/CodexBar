@@ -24,16 +24,16 @@ struct SettingsValueTests {
         #expect(SettingsValue.cleaned(raw) == expected)
         #expect(ProviderConfig(id: .codex, apiKey: raw).sanitizedAPIKey == expected)
         #expect(ClaudeAdminAPISettingsReader.cleaned(raw) == expected)
-        #expect(ClinePassSettingsReader.apiKey(environment: raw.map { ["CLINE_API_KEY": $0] } ?? [:]) == expected)
+        #expect(OpenAIAPISettingsReader.apiKey(environment: raw.map { ["OPENAI_API_KEY": $0] } ?? [:]) == expected)
     }
 
     @Test
     func `empty first credentials retain provider fallback order`() {
-        let environment = ["CLINE_API_KEY": " \" \" ", "CLINEPASS_API_KEY": " 'fallback-token' "]
-        #expect(ClinePassSettingsReader.apiKey(environment: environment) == "fallback-token")
-        #expect(ClinePassSettingsReader.apiKey(environment: [
-            "CLINE_API_KEY": "'preferred-token'",
-            "CLINEPASS_API_KEY": "fallback-token",
+        let environment = ["OPENAI_ADMIN_KEY": " \" \" ", "OPENAI_API_KEY": " 'fallback-token' "]
+        #expect(OpenAIAPISettingsReader.apiKey(environment: environment) == "fallback-token")
+        #expect(OpenAIAPISettingsReader.apiKey(environment: [
+            "OPENAI_ADMIN_KEY": "'preferred-token'",
+            "OPENAI_API_KEY": "fallback-token",
         ]) == "preferred-token")
     }
 }

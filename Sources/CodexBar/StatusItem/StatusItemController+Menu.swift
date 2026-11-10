@@ -114,16 +114,9 @@ extension StatusItemController {
         var provider: UsageProvider?
         if self.shouldMergeIcons {
             let enabledProviders = self.store.enabledFirstPartyProvidersForDisplay()
-            let selection = self.resolvedMergedMenuSelection(enabledProviders: enabledProviders)
-            if Self.isUserPluginSelection(selection), let pluginID = selection?.instanceID {
-                self.lastMenuProvider = pluginID
-                provider = nil
-            } else {
-                // Provider-specific by design: Codex is the persisted menu identity fallback when selection is empty.
-                let resolvedProvider = self.resolvedMenuProvider(enabledProviders: enabledProviders)
-                self.lastMenuProvider = (resolvedProvider ?? .codex).instanceID
-                provider = resolvedProvider
-            }
+            let resolvedProvider = self.resolvedMenuProvider(enabledProviders: enabledProviders)
+            self.lastMenuProvider = (resolvedProvider ?? .codex).instanceID
+            provider = resolvedProvider
         } else {
             if let menuProvider = self.menuProviders[ObjectIdentifier(menu)] {
                 self.lastMenuProvider = menuProvider
@@ -234,7 +227,6 @@ extension StatusItemController {
         let includesOverview = self.includesOverviewTab(enabledProviders: enabledProviders)
         let switcherSelection = self.resolvedMergedMenuSelection(enabledProviders: enabledProviders)
         let isOverviewSelected = switcherSelection == .overview
-        let isPluginSelected = Self.isUserPluginSelection(switcherSelection)
         let selectedProvider: UsageProvider? = switch switcherSelection {
         case .overview: self.resolvedMenuProvider(enabledProviders: enabledProviders)
         case let .provider(instanceID): instanceID.firstPartyProvider
@@ -242,7 +234,7 @@ extension StatusItemController {
         }
         // Provider-specific by design: Codex remains the empty merged-menu selection fallback.
         let currentProvider = selectedProvider ?? enabledProviders.first ?? .codex
-        let suppressAccountSwitchers = isOverviewSelected || isPluginSelected
+        let suppressAccountSwitchers = isOverviewSelected
         let rawCodexAccountDisplay = suppressAccountSwitchers ? nil : self.codexAccountMenuDisplay(for: currentProvider)
         let codexAccountDisplay = suppressAccountSwitchers
             ? nil
@@ -257,7 +249,7 @@ extension StatusItemController {
             showAllAccounts: showAllAccounts)
         let descriptor = self.makeMenuDescriptor(
             provider: selectedProvider,
-            includeContextualActions: !isOverviewSelected && !isPluginSelected,
+            includeContextualActions: !isOverviewSelected,
             selection: switcherSelection)
         let menuWidth = self.menuCardWidth(
             for: enabledProviders,
@@ -603,21 +595,6 @@ extension StatusItemController {
             guard let provider = instanceID.firstPartyProvider,
                   let model = row.model
             else {
-                if let plugin = UserProviderPluginRegistry.plugin(for: instanceID) {
-                    let item = self.makeUserPluginMenuCardItem(
-                        plugin,
-                        width: menuWidth,
-                        id: identifier,
-                        onClick: plugin.manifest.topLevel ? { [weak self, weak interactionMenu] in
-                            guard let self, let interactionMenu else { return }
-                            self.selectOverviewProvider(instanceID, menu: interactionMenu)
-                        } : nil)
-                    if plugin.manifest.topLevel {
-                        item.target = self
-                        item.action = #selector(self.selectOverviewProvider(_:))
-                    }
-                    menu.addItem(item)
-                }
                 continue
             }
             let storageText = row.accountID == nil ? self.store.storageFootprintText(for: provider) : nil
@@ -686,15 +663,9 @@ extension StatusItemController {
     }
 
     private func addMenuCards(to menu: NSMenu, context: MenuCardContext, captureMenu: NSMenu? = nil) -> Bool {
-        let fleetProjection = self.fleetAccountProjection(for: context.currentProvider)
-        if self.addFleetFallback(fleetProjection, to: menu, context: context) {
-            return false
-        }
-
         if let codexAccountDisplay = context.codexAccountDisplay, codexAccountDisplay.showAll {
             self.addCodexAccountMenuCards(
                 codexAccountDisplay, to: menu, captureMenu: captureMenu ?? menu, context: context)
-            self.addFleetAccountMenuCards(fleetProjection.additionalAccounts, to: menu, context: context)
             return false
         }
 
@@ -706,7 +677,6 @@ extension StatusItemController {
             showSingleAccount: self.settings.claudeSwapShowSingleAccount)
         {
             self.addClaudeSwapMenuCards(to: menu, captureMenu: captureMenu ?? menu, context: context)
-            self.addFleetAccountMenuCards(fleetProjection.additionalAccounts, to: menu, context: context)
             return false
         }
 
@@ -717,7 +687,6 @@ extension StatusItemController {
                 captureMenu: captureMenu ?? menu,
                 context: context)
             {
-                self.addFleetAccountMenuCards(fleetProjection.additionalAccounts, to: menu, context: context)
                 return false
             }
             let accountSnapshots = tokenAccountDisplay.snapshots
@@ -729,19 +698,6 @@ extension StatusItemController {
                         accountSnapshot: accountSnapshot)
                 }
             self.addStackedMenuCards(cards, to: menu, context: context)
-            self.addFleetAccountMenuCards(fleetProjection.additionalAccounts, to: menu, context: context)
-            return false
-        }
-
-        // Provider-specific by design: Kilo organization scopes render as stacked account-like cards.
-        if context.currentProvider == .kilo, self.store.kiloScopeSnapshots.count > 1 {
-            let cards = self.store.kiloScopeSnapshots.compactMap { scope in
-                self.menuCardModel(
-                    for: .kilo,
-                    context: .account(.init(snapshot: scope.snapshot, error: scope.errorMessage)))
-            }
-            self.addStackedMenuCards(cards, to: menu, context: context)
-            self.addFleetAccountMenuCards(fleetProjection.additionalAccounts, to: menu, context: context)
             return false
         }
 
@@ -761,7 +717,6 @@ extension StatusItemController {
                 layoutModel: renderedModel,
                 width: context.menuWidth,
                 webItems: webItems)
-            self.addFleetAccountMenuCards(fleetProjection.additionalAccounts, to: menu, context: context)
             return true
         }
 
@@ -772,7 +727,6 @@ extension StatusItemController {
             heightCacheScope: context.currentProvider.rawValue,
             heightCacheFingerprint: renderedModel.heightFingerprint(section: "card"),
             containsInteractiveControls: true))
-        self.addFleetAccountMenuCards(fleetProjection.additionalAccounts, to: menu, context: context)
         if self.addStorageMenuCardSection(to: menu, provider: context.currentProvider, width: context.menuWidth) {
             menu.addItem(.separator())
         }
@@ -813,15 +767,6 @@ extension StatusItemController {
         switcherSelection: ProviderSwitcherSelection,
         captureMenu: NSMenu? = nil)
     {
-        if case let .provider(instanceID) = switcherSelection,
-           UserProviderPluginRegistry.plugin(for: instanceID) != nil
-        {
-            self.addUserPluginMenuCards(
-                to: menu,
-                width: context.menuWidth,
-                selectedPluginID: instanceID)
-            return
-        }
         if switcherSelection == .overview {
             let enabledProviders = self.store.enabledFirstPartyProvidersForDisplay()
             if self.addOverviewRows(
@@ -843,9 +788,6 @@ extension StatusItemController {
                 context: context.openAIContext,
                 addedOpenAIWebItems: addedOpenAIWebItems)
             self.addUsageHistoryClusterIfNeeded(to: menu, context: context)
-        }
-        if switcherSelection != .overview {
-            self.addUserPluginMenuCards(to: menu, width: context.menuWidth)
         }
     }
 
@@ -1000,16 +942,12 @@ extension StatusItemController {
     {
         let view = ProviderSwitcherView(
             providers: providers,
-            pluginProviders: self.topLevelUserProviderPlugins(),
             selected: selected,
             includesOverview: includesOverview,
             width: width,
             showsIcons: self.settings.switcherShowsIcons,
             iconProvider: { [weak self] provider in
                 self?.switcherIcon(for: provider) ?? NSImage()
-            },
-            pluginIconProvider: { [weak self] plugin in
-                self?.userPluginSwitcherIcon(for: plugin) ?? NSImage()
             },
             weeklyRemainingProvider: { [weak self] provider in
                 self?.switcherWeeklyRemaining(for: provider)
@@ -1267,13 +1205,6 @@ extension StatusItemController {
         let switcherProviderCount = self.switcherProviderIDs(enabledFirstPartyProviders: enabledProviders).count
         if self.shouldMergeIcons,
            switcherProviderCount > 1,
-           Self.isUserPluginSelection(selection)
-        {
-            return []
-        }
-
-        if self.shouldMergeIcons,
-           switcherProviderCount > 1,
            selection == .overview
         {
             return self.settings.resolvedMergedOverviewProviders(
@@ -1416,7 +1347,6 @@ extension StatusItemController {
                 snapshot: $0,
                 style: style,
                 showUsed: showUsed,
-                secondaryOverrideWindowID: self.settings.copilotIconSecondaryWindowOverrideID(snapshot: $0),
                 now: now)
         }
         let primary = resolved?.primary
@@ -1510,15 +1440,9 @@ extension StatusItemController {
         if webItems.hasUsageBreakdown {
             return self.makeUsageBreakdownSubmenu(width: width)
         }
-        // Provider-specific by design: OpenAI and Mistral attach cost history to their provider usage row.
+        // Provider-specific by design: OpenAI attaches cost history to its provider usage row.
         if provider == .openai, self.settings.costSummaryShowsSubmenu(for: provider) {
             return self.makeOpenAIAPIUsageSubmenu(provider: provider, width: width)
-        }
-        // Mistral's top usage pane has no rate-limit bars of its own, so its cost history hangs off this row
-        // when the Cost Summary style permits it. Other inline cost dashboards follow the same submenu policy;
-        // Both still keeps the dedicated Cost row.
-        if provider == .mistral, self.settings.costSummaryShowsSubmenu(for: provider) {
-            return self.makeCostHistorySubmenu(provider: provider, width: width)
         }
         if hasInlineCostDashboard, self.settings.costSummaryShowsSubmenu(for: provider) {
             return self.makeCostHistorySubmenu(provider: provider, width: width)
@@ -1602,8 +1526,8 @@ extension StatusItemController {
     /// Providers that surface the live component list as a native submenu. Every other provider
     /// keeps the plain "Status Page" link that opens the website. Kept deliberately small: these
     /// are the statuspage.io/incident.io feeds we actively curate and trust to render well.
-    /// Provider-specific by design: these four curated status feeds expose component trees rendered by the app.
-    static let statusComponentsSubmenuProviders: Set<UsageProvider> = [.claude, .codex, .augment, .zoommate]
+    /// Provider-specific by design: these curated status feeds expose component trees rendered by the app.
+    static let statusComponentsSubmenuProviders: Set<UsageProvider> = [.claude, .codex]
 
     /// Filters `components` down to a provider's descriptor-owned named allowlist, if configured;
     /// returns `components` unchanged when the provider has no allowlist. Matching is by exact

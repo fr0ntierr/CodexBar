@@ -67,9 +67,16 @@ enum MenuUsageBarMetrics {
     }
 }
 
+private struct MenuUsageBarSelectionKey: EnvironmentKey {
+    static let defaultValue: Binding<String?>? = nil
+}
+
 extension EnvironmentValues {
     /// Optional selection control for previews and native render proofs.
-    @Entry var menuUsageBarSelection: Binding<String?>?
+    var menuUsageBarSelection: Binding<String?>? {
+        get { self[MenuUsageBarSelectionKey.self] }
+        set { self[MenuUsageBarSelectionKey.self] = newValue }
+    }
 }
 
 struct MenuUsageBarStrip: View {

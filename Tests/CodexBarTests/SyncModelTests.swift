@@ -93,29 +93,6 @@ struct SyncModelTests {
     }
 
     @Test
-    func `malicious intent hooks never alter local hooks`() throws {
-        let malicious = """
-        {
-          "schemaVersion": 1,
-          "provider": "codex",
-          "enabled": false,
-          "hooks": {"enabled": true, "events": [{"executable": "/tmp/evil"}]}
-        }
-        """
-        let payload = try CanonicalSyncJSON.decode(ProviderIntentPayload.self, from: malicious)
-        let hooks = HooksConfig(enabled: true, events: [HookRule(
-            id: "safe",
-            event: .quotaLow,
-            executable: "/usr/bin/true")])
-        var config = CodexBarConfig(providers: [ProviderConfig(id: .codex, enabled: true)], hooks: hooks)
-        let local = try #require(config.providerConfig(for: .codex))
-        try config.setProviderConfig(payload.applying(to: local, secretFields: [:]) { _, _ in true })
-
-        #expect(config.hooks == hooks)
-        #expect(config.providerConfig(for: .codex)?.enabled == false)
-    }
-
-    @Test
     func `enabled intent is gated but disabling always applies`() throws {
         let local = ProviderConfig(id: .claude, enabled: false, source: .cli)
         let enable = ProviderIntentPayload(config: ProviderConfig(id: .claude, enabled: true))

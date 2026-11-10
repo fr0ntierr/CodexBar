@@ -41,33 +41,8 @@ extension UsageStore {
         self.tokenCostLogger.info(message)
     }
 
-    enum CursorCostCookiePreparation {
-        case proceed(String?)
-        case reject
-    }
-
-    func prepareCursorCostCookie(for provider: UsageProvider) -> CursorCostCookiePreparation {
-        // Provider-specific by design: Cursor's dashboard cost fetch consumes its manually selected browser cookie.
-        guard provider == .cursor, self.settings.cursorCookieSource == .manual else {
-            return .proceed(nil)
-        }
-        guard let header = CookieHeaderNormalizer.normalize(self.settings.cursorCookieHeader) else {
-            self.lastTokenFetchAt.removeValue(forKey: provider.instanceID)
-            self.lastTokenFetchScope.removeValue(forKey: provider.instanceID)
-            self.tokenFetchFailureCooldowns.removeValue(forKey: provider.instanceID)
-            self.clearTokenSnapshot(for: provider)
-            self.tokenErrors[provider.instanceID] = "Cursor cost requires a non-empty Manual cookie header."
-            self.tokenFailureGates[provider.instanceID]?.reset()
-            return .reject
-        }
-        return .proceed(header)
-    }
-
-    /// Provider-specific by design: Pi, Claude, and unscoped Codex share the Pi history scope lifecycle.
     private func usesPiHistoryScope(_ provider: UsageProvider) -> Bool {
-        provider == .pi || (self.shouldIncludePiSessionsInTokenSnapshot(for: provider) &&
-            (provider == .claude ||
-                (provider == .codex && self.tokenCostScope(for: provider).codexHomePath == nil)))
+        false
     }
 
     func tokenAccountingScopeIsCurrent(_ accounting: PiSnapshotAccounting?, for provider: UsageProvider) -> Bool {
@@ -107,38 +82,24 @@ extension UsageStore {
             self.piHistoryScopeFingerprint = fingerprint
             self.piHistoryScopeGeneration &+= 1
             // Provider-specific by design: invalidate only consumers that include Pi history.
-            for scopedProvider in [UsageProvider.pi, .claude, .codex] where self.usesPiHistoryScope(scopedProvider) {
+            for scopedProvider in [UsageProvider.claude, .codex] where self.usesPiHistoryScope(scopedProvider) {
                 self.clearTokenSnapshot(for: scopedProvider)
                 self.clearSpendDashboardTokenSnapshot(for: scopedProvider)
                 self.lastTokenFetchAt.removeValue(forKey: scopedProvider.instanceID)
                 self.lastTokenFetchScope.removeValue(forKey: scopedProvider.instanceID)
             }
-            self.synchronizeSharedSpendDashboardAfterTokenPublication(for: .pi)
             return true
         }
         self.piHistoryScopeRefreshTask = task
         return await task.value
     }
 
-    /// Reports used by the combined dashboard can describe Pi as a separate
-    /// source. The fetcher still supports inclusive standalone reads; this
-    /// helper keeps the existing ownership label for scope invalidation.
     func shouldIncludePiSessionsInTokenSnapshot(for provider: UsageProvider) -> Bool {
-        guard provider == .claude || provider == .codex else { return true }
-        if provider == .codex, self.tokenCostScope(for: provider).codexHomePath != nil { return false }
-        if provider == .claude, self.claudeTokenCostConfigDirectory != nil { return false }
-        let piIsCostSource = self.settings.isProviderEnabledCached(
-            provider: .pi,
-            metadataByProvider: self.providerMetadata) &&
-            self.settings.isCostUsageEffectivelyEnabled(for: .pi)
-        return !piIsCostSource
+        false
     }
 
     func piRowsScopeSignature(for provider: UsageProvider) -> String? {
-        guard provider == .claude ||
-            (provider == .codex && self.tokenCostScope(for: provider).codexHomePath == nil)
-        else { return nil }
-        return self.shouldIncludePiSessionsInTokenSnapshot(for: provider) ? "fallback" : "owned"
+        nil
     }
 
     func loadTokenUsageSnapshot(
@@ -166,20 +127,11 @@ extension UsageStore {
         let effectiveIncludePiSessions = includePiSessions && claudeDirectory == nil
         // Provider-specific by design: the Codex ledger owns pricing refresh while Bedrock resolves AWS environment.
         let allowPricingRefresh = provider != .codex || !self.settings.codexLocalSessionCostLedgerEnabled
-        let environment = provider == .bedrock
-            ? ProviderRegistry.makeEnvironment(
-                base: self.environmentBase,
-                provider: provider,
-                settings: self.settings,
-                tokenOverride: nil)
-            : self.environmentBase
+        let environment = self.environmentBase
         let antigravityProfileHomes = self.settings.providerConfig(for: provider)?
             .antigravityAdditionalProfileHomes ?? []
         let scopedCodexHomePath = codexHomePath?.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Provider-specific by design: only Pi-owned, Claude-inclusive, or unscoped Codex scans consume Pi roots.
-        let shouldDiscoverPiSessionProcessContexts = provider == .pi ||
-            (effectiveIncludePiSessions &&
-                (provider == .claude || (provider == .codex && scopedCodexHomePath?.isEmpty != false)))
+        let shouldDiscoverPiSessionProcessContexts = false
         // Provider-specific by design: only the ambient Codex ledger opts into local OpenCode history.
         let includeOpenCodeLocalHistory = provider == .codex
             && self.shouldIncludeOpenCodeLocalHistory
@@ -358,11 +310,6 @@ extension UsageStore {
         guard Self.tokenCostRequiresProviderSnapshot(provider) else { return }
         if let tokenSnapshot = self.tokenSnapshot(fromProviderSnapshot: snapshot, provider: provider) {
             self.publishTokenSnapshot(tokenSnapshot, for: provider)
-            // Provider-specific by design: a prepaid-balance snapshot without a usage chart means
-            // analytics failed. Leave the source unpublished so Overview counts it unavailable
-            // instead of known-zero spend.
-        } else if provider == .xai, XAICostUsageMapping.isAnalyticsUnavailable(snapshot) {
-            self.clearTokenSnapshot(for: provider)
         } else {
             self.publishConfirmedEmptyTokenSnapshot(for: provider)
         }
@@ -501,9 +448,6 @@ extension UsageStore {
         if provider == .claude, let directory = self.claudeTokenCostConfigDirectory {
             return (nil, "claude:directory:\(directory)")
         }
-        if provider == .vertexai {
-            return (nil, "vertexai:allow-claude-fallback=\(!self.isEnabled(.claude))")
-        }
         guard provider == .codex else {
             return (nil, provider.rawValue)
         }
@@ -577,43 +521,7 @@ extension UsageStore {
                     now: Date(),
                     calendar: self.settings.costUsageBucketCalendar)
         }
-        guard provider == .cursor else {
-            return base
-        }
-
-        let source = self.settings.cursorCookieSource
-        let credentialFingerprint = if source == .manual {
-            CookieHeaderNormalizer.normalize(self.settings.cursorCookieHeader)
-                .map(CookieHeaderCache.credentialFingerprint) ?? "missing"
-        } else {
-            self.cursorCostCredentialFingerprintForDisplay() ?? "unresolved"
-        }
-        return "\(base)|cursorCookie=\(source.rawValue):\(credentialFingerprint)"
-    }
-
-    private func cursorCostCredentialFingerprintForDisplay() -> String? {
-        #if DEBUG
-        if let override = self._test_cursorCostCredentialFingerprintOverride { return override() }
-        #endif
-        return CookieHeaderCache.loadForDisplay(provider: .cursor)
-            .map { CookieHeaderCache.credentialFingerprint($0.cookieHeader) }
-    }
-
-    func cursorCostScopeSignature(
-        historyDays: Int,
-        source: ProviderCookieSource,
-        credentialFingerprint: String,
-        includeSettingsRevision: Bool = true) -> String
-    {
-        let scope = self.tokenCostScope(for: .cursor)
-        var signature = "\(scope.signature)|historyDays=\(historyDays)"
-        if includeSettingsRevision {
-            signature += "|settingsRevision=\(self.settings.costUsageSettingsRevision)|"
-                + self.settings.costReportingPeriod.identity(
-                    now: Date(),
-                    calendar: self.settings.costUsageBucketCalendar)
-        }
-        return "\(signature)|cursorCookie=\(source.rawValue):\(credentialFingerprint)"
+        return base
     }
 
     func tokenRefreshCanReuseCurrentSnapshot(
@@ -689,19 +597,6 @@ extension UsageStore {
             return .scopeChanged
         }
         let currentSignature = self.tokenSnapshotScopeSignature(for: provider)
-        if provider == .cursor,
-           self.settings.cursorCookieSource == .auto,
-           scope.signature.contains("|cursorCookie=auto:"),
-           let fetchedCredentialScopeFingerprint
-        {
-            let resolvedSignature = self.cursorCostScopeSignature(
-                historyDays: scope.historyDays,
-                source: .auto,
-                credentialFingerprint: fetchedCredentialScopeFingerprint)
-            if currentSignature == resolvedSignature { return .current }
-            // The fetched account is still unconfirmed; retry only after the attempted scope changes.
-            return currentSignature == scope.signature ? .unchangedCredentialMismatch : .scopeChanged
-        }
         return currentSignature == scope.signature ? .current : .scopeChanged
     }
 
@@ -712,15 +607,7 @@ extension UsageStore {
         snapshot: CostUsageTokenSnapshot,
         includeSettingsRevision: Bool = true) -> String
     {
-        guard provider == .cursor,
-              self.settings.cursorCookieSource == .auto,
-              let fingerprint = snapshot.credentialScopeFingerprint
-        else { return initialSignature }
-        return self.cursorCostScopeSignature(
-            historyDays: historyDays,
-            source: .auto,
-            credentialFingerprint: fingerprint,
-            includeSettingsRevision: includeSettingsRevision)
+        initialSignature
     }
 
     func tokenSnapshot(
@@ -730,28 +617,9 @@ extension UsageStore {
         -> CostUsageTokenSnapshot?
     {
         let windowDays = historyDays ?? self.settings.costUsageHistoryDays
-        // Provider-specific by design: snapshot-backed spend sources own their live billing
-        // projection. Grok contributes local session tokens only; xAI contributes Management API
-        // daily spend only. Neither converts a quota or prepaid balance into dollars.
         let result: CostUsageTokenSnapshot? = switch provider {
         case .openai:
             snapshot?.openAIAPIUsage?.toCostUsageTokenSnapshot()
-        case .mistral:
-            snapshot?.mistralUsage?.toCostUsageTokenSnapshot(historyDays: windowDays)
-        case .opencodego:
-            // Web-only source mode and machines with no readable local database leave
-            // `opencodegoUsage.daily` empty; a non-nil-but-dataless projection would still
-            // surface a Cost row whose history submenu has nothing to render.
-            snapshot?.opencodegoUsage.flatMap { usage in
-                usage.daily.isEmpty ? nil : usage
-                    .toCostUsageTokenSnapshot(historyDays: windowDays)
-            }
-        case .openrouter:
-            snapshot?.costUsage
-        case .xai:
-            snapshot.flatMap { XAICostUsageMapping.tokenSnapshot(from: $0, historyDays: windowDays) }
-        case .grok:
-            self.grokLocalTokenSnapshot(from: snapshot, historyDays: windowDays)
         default:
             nil
         }
@@ -763,10 +631,8 @@ extension UsageStore {
     }
 
     nonisolated static func tokenCostRequiresProviderSnapshot(_ provider: UsageProvider) -> Bool {
-        // Provider-specific by design: these providers project live usage snapshots into the
-        // shared spend catalog instead of running the local CostUsageFetcher JSONL pipeline.
         switch provider {
-        case .grok, .mistral, .openai, .opencodego, .openrouter, .xai:
+        case .openai:
             true
         default:
             false
@@ -778,7 +644,7 @@ extension UsageStore {
     {
         let root = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first!
         return root
-            .appendingPathComponent("CodexBar", isDirectory: true)
+            .appendingPathComponent("CodexBarLite", isDirectory: true)
             .appendingPathComponent("cost-usage", isDirectory: true)
     }
 
@@ -922,7 +788,6 @@ extension UsageStore {
     nonisolated static func tokenFetchFailureRetryDelay(_ error: Error, ttl: TimeInterval?) -> TimeInterval? {
         switch error {
         case CostUsageError.timedOut: ttl
-        case CursorStatusProbeError.costRequestForbidden: ttl.map { max($0, 6 * 60 * 60) }
         default: nil
         }
     }

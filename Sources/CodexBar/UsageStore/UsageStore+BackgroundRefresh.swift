@@ -53,9 +53,6 @@ extension UsageStore {
             self.codexAccountSnapshots = []
             self.lastCodexUsagePublicationGuard = nil
         }
-        if provider == .kilo {
-            self.kiloScopeSnapshots = []
-        }
         if provider == .claude {
             self.widgetUsagePreservationBlockedProviders.insert(provider.instanceID)
             self.clearClaudeSwapAccountState()
@@ -68,10 +65,6 @@ extension UsageStore {
         self.tokenFailureGates[provider.instanceID]?.reset()
         self.statuses.removeValue(forKey: provider.instanceID)
         self.statusComponents.removeValue(forKey: provider.instanceID)
-        self.clearSessionQuotaTransitionState(provider: provider)
-        self.predictivePaceWarningNotifiedKeys = Set(
-            self.predictivePaceWarningNotifiedKeys.filter { $0.provider != provider })
-        self.quotaWarningState = self.quotaWarningState.filter { $0.key.provider != provider.instanceID }
         self.lastTokenFetchAt.removeValue(forKey: provider.instanceID)
         self.lastTokenFetchScope.removeValue(forKey: provider.instanceID)
         self.tokenFetchFailureCooldowns.removeValue(forKey: provider.instanceID)
@@ -92,20 +85,11 @@ extension UsageStore {
 
     func clearDisabledProviderState(enabledProviders: Set<ProviderInstanceID>) {
         for provider in UsageProvider.allCases where !enabledProviders.contains(provider.instanceID) {
-            self.retireCredentialNotifications(provider: provider)
             if self.currentProviderRefreshAllowsDisabledPublication(provider) {
                 self.clearProviderRuntimeState(provider)
             } else {
                 self.clearProviderState(provider)
             }
-        }
-        let dynamicIDs = Set(self.snapshots.keys)
-            .union(self.errors.keys)
-            .union(self.lastSourceLabels.keys)
-            .union(self.refreshingProviders)
-            .filter { $0.firstPartyProvider == nil }
-        for instanceID in dynamicIDs where !enabledProviders.contains(instanceID) {
-            self.clearUserPluginState(instanceID)
         }
     }
 

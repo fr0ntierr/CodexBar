@@ -638,7 +638,7 @@ struct SpendDashboardSourceConcurrencyTests {
             settings.setProviderEnabled(
                 provider: provider,
                 metadata: metadata,
-                enabled: provider == .claude || provider == .mistral)
+                enabled: provider == .claude || provider == .codex)
         }
         let store = UsageStore(
             fetcher: UsageFetcher(environment: [:]),
@@ -647,9 +647,9 @@ struct SpendDashboardSourceConcurrencyTests {
             startupBehavior: .testing,
             environmentBase: [:])
         let providers = SpendDashboardSource.costCapableProviders(store: store)
-        #expect(providers == [.claude, .mistral])
+        #expect(providers == [.claude, .codex])
         let firstProvider = UsageProvider.claude
-        let laterProvider = UsageProvider.mistral
+        let laterProvider = UsageProvider.codex
         store._setTokenSnapshotForTesting(
             Self.input(provider: firstProvider, cost: 1).snapshot,
             provider: firstProvider)

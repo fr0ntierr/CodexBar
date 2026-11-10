@@ -5,7 +5,7 @@ final class ConfigFileWatcher: @unchecked Sendable {
     typealias ChangeHandler = @Sendable () -> Void
 
     private let fileURL: URL
-    private let queue = DispatchQueue(label: "com.steipete.codexbar.config-file-watcher", qos: .utility)
+    private let queue = DispatchQueue(label: "com.steipete.codexbarlite.config-file-watcher", qos: .utility)
     private let changeHandler: ChangeHandler
     private let beforeRegistrationForTesting: ChangeHandler?
     private let lock = NSLock()

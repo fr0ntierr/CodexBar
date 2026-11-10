@@ -110,22 +110,7 @@ public struct ProviderPluginManifest: Sendable {
     }
 
     func openRouterManagementAuthSecret(method: String, url: URL) throws -> String {
-        let secret = "OPENROUTER_MANAGEMENT_API_KEY"
-        // Provider-specific by design: only OpenRouter Activity may use its separate management credential.
-        guard self.id.firstPartyProvider == .openrouter,
-              self.settings.first(where: { $0.key == secret })?.kind == .secure,
-              method == "GET",
-              url.scheme?.lowercased() == "https",
-              url.host?.lowercased() == "openrouter.ai",
-              url.port == nil,
-              url.user == nil,
-              url.password == nil,
-              url.path == "/api/v1/activity",
-              url.fragment == nil
-        else {
-            throw ProviderPluginError.secretAccess("OpenRouter management auth is unavailable for this plugin")
-        }
-        return secret
+        throw ProviderPluginError.secretAccess("OpenRouter management auth is unavailable")
     }
 
     // Manifest parsing validates the complete security surface in one pass.
@@ -470,9 +455,7 @@ public struct ProviderPluginManifest: Sendable {
     }
 
     /// Provider-specific by design: these configured gateways explicitly support private-network HTTP.
-    private static let bundledPrivateNetworkHTTPProviders: Set<UsageProvider> = [
-        .llmproxy, .litellm, .bifrost, .aixy, .llmman,
-    ]
+    private static let bundledPrivateNetworkHTTPProviders: Set<UsageProvider> = []
 }
 
 enum ProviderPluginOrigin {

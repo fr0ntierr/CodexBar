@@ -361,11 +361,6 @@ extension SettingsStore {
         }
     }
 
-    var kiroMenuBarDisplayMode: KiroMenuBarDisplayMode {
-        get { KiroMenuBarDisplayMode(rawValue: self.defaultsState.kiroMenuBarDisplayModeRaw ?? "") ?? .automatic }
-        set { self.setOptionalDefault(\.kiroMenuBarDisplayModeRaw, newValue.rawValue, key: "kiroMenuBarDisplayMode") }
-    }
-
     var accountWidgetsEnabled: Bool {
         get { self.defaultsState.accountWidgetsEnabled }
         set { self.setDefault(\.accountWidgetsEnabled, newValue, key: "accountWidgetsEnabled") }
@@ -468,11 +463,6 @@ extension SettingsStore {
             provider: provider)
     }
 
-    func menuBarLayout(forPlugin instanceID: ProviderInstanceID) -> MenuBarLayout {
-        // Preserve every saved plugin layout, including the percentage-only default saved in 0.82.0.
-        self.defaultsState.menuBarLayoutOverridesRaw[instanceID.rawValue] ?? self.menuBarLayout
-    }
-
     func setMenuBarLayout(_ layout: MenuBarLayout, forInstanceID instanceID: ProviderInstanceID) {
         self.defaultsState.menuBarLayoutOverridesRaw[instanceID.rawValue] = layout
         self.persistMenuBarLayoutOverrides()
@@ -560,11 +550,6 @@ extension SettingsStore {
         self.userDefaults.set(blobs.v3, forKey: MenuBarLayoutUserDefaultsKey.overridesV3)
         self.userDefaults.set(blobs.released, forKey: MenuBarLayoutUserDefaultsKey.overridesReleased)
         self.userDefaults.set(blobs.legacy, forKey: MenuBarLayoutUserDefaultsKey.overrides)
-    }
-
-    var copilotIconSecondaryWindowIDRaw: String {
-        get { self.defaultsState.copilotIconSecondaryWindowIDRaw }
-        set { self.setDefault(\.copilotIconSecondaryWindowIDRaw, newValue, key: "copilotIconSecondaryWindowID") }
     }
 
     var costUsageEnabled: Bool {
@@ -778,25 +763,6 @@ extension SettingsStore {
             } else if self.claudeOAuthKeychainPromptMode == .never {
                 self.claudeOAuthKeychainPromptMode = .onlyOnUserAction
             }
-        }
-    }
-
-    var copilotBudgetExtrasEnabled: Bool {
-        get { self.defaultsState.copilotBudgetExtrasEnabled }
-        set {
-            self.setDefault(\.copilotBudgetExtrasEnabled, newValue, key: "copilotBudgetExtrasEnabled")
-            CodexBarLog.logger(LogCategories.settings).info(
-                "Copilot budget extras updated",
-                metadata: ["enabled": newValue ? "1" : "0"])
-            self.noteBackgroundWorkSettingsChanged()
-        }
-    }
-
-    var copilotSeatCreditEntitlementRaw: String {
-        get { self.defaultsState.copilotSeatCreditEntitlementRaw }
-        set {
-            self.setDefault(\.copilotSeatCreditEntitlementRaw, newValue, key: "copilotSeatCreditEntitlement")
-            self.noteBackgroundWorkSettingsChanged()
         }
     }
 

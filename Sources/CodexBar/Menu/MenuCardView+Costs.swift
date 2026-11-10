@@ -229,11 +229,7 @@ extension UsageMenuCardView.Model {
                 providerCurrency: snapshot.currencyCode)
         } ?? "—"
         let sessionTokens = snapshot.sessionTokens.map { UsageFormatter.tokenCountString($0) }
-        let sessionLabel = if provider == .bedrock || provider == .mistral {
-            Self.latestBillingDayLabel(from: snapshot)
-        } else {
-            L("Today")
-        }
+        let sessionLabel = L("Today")
         let sessionLine: String = {
             if tokensOnly { return Self.tokenWindowLine(label: sessionLabel, tokens: snapshot.sessionTokens) }
             if let sessionTokens {
@@ -261,11 +257,6 @@ extension UsageMenuCardView.Model {
         let monthTokens = monthTokensValue.map { UsageFormatter.tokenCountString($0) }
         let windowLabel = if let historyLabel = snapshot.historyLabel {
             historyLabel
-        } else if provider == .mistral,
-                  snapshot.historyDays == 1,
-                  Self.bedrockLatestBillingDay(from: snapshot.daily) != nil
-        {
-            L("Latest billing day")
         } else {
             Self.costHistoryWindowLabel(days: snapshot.historyDays)
         }

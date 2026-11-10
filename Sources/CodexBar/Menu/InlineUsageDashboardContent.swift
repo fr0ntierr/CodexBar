@@ -384,14 +384,6 @@ extension UsageMenuCardView.Model {
                 kpis.append(contentsOf: trailingKPIs)
             }
         }
-        if input.provider == .cursor, let meteredCostUSD = snapshot.meteredCostUSD {
-            kpis.insert(
-                .init(
-                    title: L("Cursor-metered"),
-                    value: convertedString(meteredCostUSD),
-                    emphasis: true),
-                at: 0)
-        }
         var model = InlineUsageDashboardModel(
             accessibilityLabel: accessibilityLabel,
             valueStyle: Self.costValueStyle(currencyCode: displayCurrencyCode),

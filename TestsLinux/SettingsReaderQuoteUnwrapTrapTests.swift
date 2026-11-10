@@ -5,57 +5,52 @@ import Testing
 /// Removing both quotes with mutating String operations formerly trapped on a lone quote.
 struct SettingsReaderQuoteUnwrapTrapTests {
     @Test
-    func `Alibaba cookie rejects a lone double quote`() {
-        let env = [AlibabaTokenPlanSettingsReader.cookieHeaderKey: "\""]
-        #expect(AlibabaTokenPlanSettingsReader.cookieHeader(environment: env) == nil)
-    }
-
-    @Test
-    func `Alibaba cookie rejects a lone apostrophe`() {
-        let env = [AlibabaTokenPlanSettingsReader.cookieHeaderKey: "'"]
-        #expect(AlibabaTokenPlanSettingsReader.cookieHeader(environment: env) == nil)
-    }
-
-    @Test
-    func `Alibaba cookie unwraps double quotes`() {
-        let env = [AlibabaTokenPlanSettingsReader.cookieHeaderKey: "\"abc=def\""]
-        #expect(AlibabaTokenPlanSettingsReader.cookieHeader(environment: env) == "abc=def")
-    }
-
-    @Test
-    func `Alibaba cookie unwraps single quotes`() {
-        let env = [AlibabaTokenPlanSettingsReader.cookieHeaderKey: "'abc=def'"]
-        #expect(AlibabaTokenPlanSettingsReader.cookieHeader(environment: env) == "abc=def")
-    }
-
-    @Test
-    func `Ollama API key rejects a lone double quote`() {
-        for key in OllamaAPISettingsReader.apiKeyEnvironmentKeys {
+    func `Claude admin API key rejects a lone double quote`() {
+        for key in ClaudeAdminAPISettingsReader.apiKeyEnvironmentKeys {
             let env = [key: "\""]
-            #expect(OllamaAPISettingsReader.apiKey(environment: env) == nil)
+            #expect(ClaudeAdminAPISettingsReader.apiKey(environment: env) == nil)
         }
     }
 
     @Test
-    func `Ollama API key rejects a lone apostrophe`() {
-        for key in OllamaAPISettingsReader.apiKeyEnvironmentKeys {
+    func `Claude admin API key rejects a lone apostrophe`() {
+        for key in ClaudeAdminAPISettingsReader.apiKeyEnvironmentKeys {
             let env = [key: "'"]
-            #expect(OllamaAPISettingsReader.apiKey(environment: env) == nil)
+            #expect(ClaudeAdminAPISettingsReader.apiKey(environment: env) == nil)
         }
     }
 
     @Test
-    func `Ollama API key unwraps quotes`() {
-        let env = [OllamaAPISettingsReader.apiKeyEnvironmentKeys[0]: "\"sk-token\""]
-        #expect(OllamaAPISettingsReader.apiKey(environment: env) == "sk-token")
+    func `Claude admin API key unwraps double quotes`() {
+        let env = [ClaudeAdminAPISettingsReader.adminAPIKeyEnvironmentKey: "\"sk-ant-admin-token\""]
+        #expect(ClaudeAdminAPISettingsReader.apiKey(environment: env) == "sk-ant-admin-token")
     }
 
     @Test
-    func `llmman API key rejects lone quotes and unwraps quotes`() {
-        for value in ["\"", "'"] {
-            #expect(LLMManSettingsReader.apiKey(environment: [LLMManSettingsReader.apiKeyEnvironmentKey: value]) == nil)
+    func `Claude admin API key unwraps single quotes`() {
+        let env = [ClaudeAdminAPISettingsReader.adminAPIKeyEnvironmentKey: "'sk-ant-admin-token'"]
+        #expect(ClaudeAdminAPISettingsReader.apiKey(environment: env) == "sk-ant-admin-token")
+    }
+
+    @Test
+    func `OpenAI API key rejects a lone double quote`() {
+        for key in OpenAIAPISettingsReader.apiKeyEnvironmentKeys {
+            let env = [key: "\""]
+            #expect(OpenAIAPISettingsReader.apiKey(environment: env) == nil)
         }
-        let env = [LLMManSettingsReader.apiKeyEnvironmentKey: "\"sk-token\""]
-        #expect(LLMManSettingsReader.apiKey(environment: env) == "sk-token")
+    }
+
+    @Test
+    func `OpenAI API key rejects a lone apostrophe`() {
+        for key in OpenAIAPISettingsReader.apiKeyEnvironmentKeys {
+            let env = [key: "'"]
+            #expect(OpenAIAPISettingsReader.apiKey(environment: env) == nil)
+        }
+    }
+
+    @Test
+    func `OpenAI API key unwraps quotes`() {
+        let env = [OpenAIAPISettingsReader.apiKeyEnvironmentKey: "\"sk-token\""]
+        #expect(OpenAIAPISettingsReader.apiKey(environment: env) == "sk-token")
     }
 }

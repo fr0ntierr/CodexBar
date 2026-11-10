@@ -49,16 +49,6 @@ extension SettingsStore {
         }
     }
 
-    func updateHooks(_ mutate: (inout HooksConfig) -> Void) {
-        // Hooks never affect provider fetching, so mark the change as not affecting
-        // background work: the config persists and the pane re-renders (via
-        // configRevision), but no provider refresh is triggered.
-        self.updateConfig(reason: "hooks", affectsBackgroundWork: false) { config in
-            var hooks = config.hooks ?? HooksConfig()
-            mutate(&hooks)
-            config.hooks = (hooks.enabled || !hooks.events.isEmpty) ? hooks : nil
-        }
-    }
 
     /// Persists provider settings that only affect an already-visible provider detail.
     /// This avoids rebuilding status items and open menus for a local selection change.
@@ -222,48 +212,6 @@ extension SettingsStore {
         guard let raw else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
-    }
-
-    func savePluginSettings(
-        provider: UsageProvider,
-        values: [String: String],
-        isCurrent: () -> Bool) async -> ProviderSettingsSaveOutcome
-    {
-        // Drain any detached save before committing the discovery, then recheck its ownership.
-        while !Task.isCancelled, let pending = self.configPersistTask {
-            await pending.value
-            if self.configPersistTask == pending { break }
-        }
-        guard !Task.isCancelled, !self.configLoading, !self.configNeedsReload, isCurrent() else { return .stale }
-        var config: CodexBarConfig
-        do {
-            config = try self.configPersistenceCoordinator.load(self.configStore) ?? self.config
-        } catch {
-            self.configNeedsReload = true
-            return .failed
-        }
-        do {
-            let original = self.config
-                .providerConfig(for: provider.instanceID) ?? ProviderConfig(id: provider.instanceID)
-            guard ProviderPluginResultPolicy.matches(
-                config.providerConfig(for: provider.instanceID) ?? ProviderConfig(id: provider.instanceID), original)
-            else { return .stale }
-            let updated = try ProviderDescriptorRegistry.descriptor(for: provider).pluginResultPolicy
-                .applying(values, to: original)
-            guard !ProviderPluginResultPolicy.matches(updated, original) else { return .unchanged }
-            config.setProviderConfig(updated)
-            try Self.writeConfig(
-                config,
-                to: self.configStore,
-                watcher: self.configFileWatcher,
-                permit: self.configPersistenceCoordinator.makeWritePermit())
-            self.config = config.normalized()
-            self.updateProviderState(config: self.config)
-            self.bumpConfigRevision(reason: "plugin-settings", affectsBackgroundWork: false)
-            return .saved
-        } catch {
-            return .failed
-        }
     }
 
     func schedulePersistConfig() {

@@ -12,17 +12,6 @@ public struct KeychainPromptContext: Sendable {
         case museToken
         case codexCookie
         case claudeCookie
-        case cursorCookie
-        case opencodeCookie
-        case factoryCookie
-        case zaiToken
-        case syntheticToken
-        case copilotToken
-        case kimiToken
-        case minimaxCookie
-        case minimaxToken
-        case augmentCookie
-        case ampCookie
     }
 
     public let kind: Kind

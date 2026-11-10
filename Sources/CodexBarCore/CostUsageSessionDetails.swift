@@ -25,7 +25,7 @@ public enum CostUsageSessionDetailError: Error, Sendable, Equatable {
 
 /// No cache: the selected SwiftUI pane owns the only retained request-detail result.
 public enum CostUsageSessionDetailLoader {
-    private static let queue = DispatchQueue(label: "com.steipete.codexbar.session-details", qos: .utility)
+    private static let queue = DispatchQueue(label: "com.steipete.codexbarlite.session-details", qos: .utility)
 
     struct Limits: Sendable {
         var requests = 5000

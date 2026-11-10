@@ -6,17 +6,17 @@ struct AppGroupSupportTests {
     @Test
     func `app group identifiers use resolved team-prefixed release and debug variants`() {
         #expect(
-            AppGroupSupport.currentGroupID(teamID: "Y5PE65HELJ", bundleID: "com.steipete.codexbar")
-                == "Y5PE65HELJ.com.steipete.codexbar")
+            AppGroupSupport.currentGroupID(teamID: "Y5PE65HELJ", bundleID: "com.steipete.codexbarlite")
+                == "Y5PE65HELJ.com.steipete.codexbarlite")
         #expect(
-            AppGroupSupport.currentGroupID(teamID: "ABCDE12345", bundleID: "com.steipete.codexbar.debug")
-                == "ABCDE12345.com.steipete.codexbar.debug")
+            AppGroupSupport.currentGroupID(teamID: "ABCDE12345", bundleID: "com.steipete.codexbarlite.debug")
+                == "ABCDE12345.com.steipete.codexbarlite.debug")
         #expect(
-            AppGroupSupport.legacyGroupID(for: "com.steipete.codexbar")
-                == "group.com.steipete.codexbar")
+            AppGroupSupport.legacyGroupID(for: "com.steipete.codexbarlite")
+                == "group.com.steipete.codexbarlite")
         #expect(
-            AppGroupSupport.legacyGroupID(for: "com.steipete.codexbar.debug")
-                == "group.com.steipete.codexbar.debug")
+            AppGroupSupport.legacyGroupID(for: "com.steipete.codexbarlite.debug")
+                == "group.com.steipete.codexbarlite.debug")
     }
 
     @Test
@@ -36,7 +36,7 @@ struct AppGroupSupportTests {
         let fixture = try MigrationFixture()
         defer { fixture.cleanUp() }
         fixture.legacyDefaults.set(true, forKey: "debugDisableKeychainAccess")
-        fixture.legacyDefaults.set(UsageProvider.cursor.rawValue, forKey: "widgetSelectedProvider")
+        fixture.legacyDefaults.set(UsageProvider.claude.rawValue, forKey: "widgetSelectedProvider")
         try fixture.writeSnapshot("legacy-snapshot", to: fixture.legacySnapshotURL)
 
         let result = fixture.migrate()
@@ -45,7 +45,7 @@ struct AppGroupSupportTests {
         #expect(result.copiedSnapshot)
         #expect(result.copiedDefaults == 2)
         #expect(fixture.currentDefaults.bool(forKey: "debugDisableKeychainAccess"))
-        #expect(fixture.currentDefaults.string(forKey: "widgetSelectedProvider") == UsageProvider.cursor.rawValue)
+        #expect(fixture.currentDefaults.string(forKey: "widgetSelectedProvider") == UsageProvider.claude.rawValue)
         #expect(try Data(contentsOf: fixture.currentSnapshotURL) == Data("legacy-snapshot".utf8))
         #expect(
             fixture.standardDefaults.integer(forKey: AppGroupSupport.migrationVersionKey)
@@ -74,7 +74,7 @@ struct AppGroupSupportTests {
         fixture.currentDefaults.set(false, forKey: "debugDisableKeychainAccess")
         fixture.currentDefaults.set(UsageProvider.codex.rawValue, forKey: "widgetSelectedProvider")
         fixture.legacyDefaults.set(true, forKey: "debugDisableKeychainAccess")
-        fixture.legacyDefaults.set(UsageProvider.cursor.rawValue, forKey: "widgetSelectedProvider")
+        fixture.legacyDefaults.set(UsageProvider.claude.rawValue, forKey: "widgetSelectedProvider")
 
         let result = fixture.migrate()
 
@@ -172,7 +172,7 @@ private struct MigrationFixture {
     func migrate(currentDefaultsAvailable: Bool = true) -> AppGroupSupport.MigrationResult {
         // nil is intentional only for the unavailable-target case: container lookup is stubbed to nil.
         AppGroupSupport.migrateLegacyDataIfNeeded(
-            bundleID: "com.steipete.codexbar",
+            bundleID: "com.steipete.codexbarlite",
             standardDefaults: self.standardDefaults,
             fileManager: self.fileManager,
             homeDirectory: self.root.appendingPathComponent("home", isDirectory: true),

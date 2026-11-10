@@ -45,9 +45,9 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     private static let defaultMenuRefreshEnabled = !SettingsStore.isRunningTests
     private(set) static var menuRefreshEnabled = !SettingsStore.isRunningTests
     static let quotaWarningFlashDuration: TimeInterval = 60
-    private nonisolated static let statusItemAccessibilityTitle = "CodexBar"
-    private nonisolated static let debugStatusItemAccessibilityTitle = "CodexBar Debug"
-    private nonisolated static let statusItemAccessibilityIdentifierPrefix = "CodexBar.StatusItem"
+    private nonisolated static let statusItemAccessibilityTitle = "CodexBarLite"
+    private nonisolated static let debugStatusItemAccessibilityTitle = "CodexBarLite Debug"
+    private nonisolated static let statusItemAccessibilityIdentifierPrefix = "CodexBarLite.StatusItem"
     private nonisolated static let mergedLegacyDefaultItemIndex = 0
 
     enum StatusItemIdentity {
@@ -122,14 +122,6 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
 
     let store: UsageStore
     let settings: SettingsStore
-    var cloudSyncState: CloudSyncState {
-        didSet {
-            guard oldValue !== self.cloudSyncState else { return }
-            self.observeCloudSyncChanges()
-            self.refreshForCloudSyncChange()
-        }
-    }
-
     let agentSessions: AgentSessionsStore
     lazy var menuCardRefreshMonitor = self.makeMenuCardRefreshMonitor()
 
@@ -379,15 +371,13 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         statusBar: NSStatusBar = .system,
         menuCardRenderingEnabled: Bool = StatusItemController.menuCardRenderingEnabled,
         menuRefreshEnabled: Bool = StatusItemController.menuRefreshEnabled,
-        observeProviderConfigNotifications: Bool = !SettingsStore.isRunningTests,
-        cloudSyncState: CloudSyncState = CloudSyncState())
+        observeProviderConfigNotifications: Bool = !SettingsStore.isRunningTests)
     {
         if SettingsStore.isRunningTests {
             _ = NSApplication.shared
         }
         self.store = store
         self.settings = settings
-        self.cloudSyncState = cloudSyncState
         self.agentSessions = agentSessions ?? AgentSessionsStore(settings: settings)
         self.account = account
         self.updater = updater
@@ -451,11 +441,6 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
             selector: #selector(self.handleDebugBlinkNotification),
             name: .codexbarDebugBlinkNow,
             object: nil)
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(self.handleQuotaWarningPosted(_:)),
-            name: .codexbarQuotaWarningDidPost,
-            object: nil)
         if observeProviderConfigNotifications {
             NotificationCenter.default.addObserver(
                 self,
@@ -509,7 +494,6 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         self.observeSettingsChanges()
         self.observeUpdaterChanges()
         self.observeManagedCodexCoordinatorChanges()
-        self.observeCloudSyncChanges()
     }
 
     private func observeStoreChanges() {
@@ -607,11 +591,6 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
             }
         }
         self.handleProviderConfigChange(reason: "notification:\(reason)")
-    }
-
-    @objc private func handleQuotaWarningPosted(_ notification: Notification) {
-        guard let event = notification.object as? QuotaWarningPostedEvent else { return }
-        self.startQuotaWarningFlash(provider: event.provider, postedAt: event.postedAt)
     }
 
     private func observeUpdaterChanges() {
@@ -1012,15 +991,6 @@ extension StatusItemController {
 #endif
 
 extension StatusItemController {
-    /// Fleet eligibility can create or remove provider items even when local refresh availability never changes.
-    func refreshForCloudSyncChange() {
-        self.lastAppliedMergedIconRenderSignature = nil
-        self.lastAppliedProviderIconRenderSignatures.removeAll()
-        self.updateVisibility()
-        self.updateIcons()
-        self.invalidateMenus(refreshOpenMenus: true, deferOpenParentMenuRebuild: true)
-    }
-
     func legacyDefaultItemIndex(forNewProvider provider: UsageProvider) -> Int? {
         let visibleProviders = self.settings.orderedFirstPartyProviders().filter { self.isVisible($0) }
         guard let providerOffset = visibleProviders.firstIndex(of: provider) else { return nil }
@@ -1040,5 +1010,63 @@ extension StatusItemController {
         }
         self.updateVisibility()
         self.updateIcons()
+    }
+
+    var shouldMergeIcons: Bool {
+        self.settings.mergeIcons && self.store.enabledProvidersForDisplay().count > 1
+    }
+
+    func switcherProviderIDs(enabledFirstPartyProviders: [UsageProvider]) -> [ProviderInstanceID] {
+        enabledFirstPartyProviders.map(\.instanceID)
+    }
+
+    static func resolvedSwitcherProviderID(
+        providerIDs: [ProviderInstanceID],
+        selectedProviderID: ProviderInstanceID?,
+        fallbackProviderID: ProviderInstanceID) -> ProviderInstanceID
+    {
+        if let selectedProviderID, providerIDs.contains(selectedProviderID) {
+            return selectedProviderID
+        }
+        return providerIDs.contains(fallbackProviderID) ? fallbackProviderID : providerIDs.first ?? fallbackProviderID
+    }
+
+    func overviewProviderIDs(enabledProviders: [UsageProvider]) -> [ProviderInstanceID] {
+        let enabled = Set(enabledProviders)
+        return self.store.enabledProvidersForDisplay().filter {
+            $0.firstPartyProvider.map(enabled.contains) ?? true
+        }
+    }
+
+    func includesOverviewTab(enabledProviders: [UsageProvider]) -> Bool {
+        self.switcherProviderIDs(enabledFirstPartyProviders: enabledProviders).count > 1 &&
+            !self.settings.resolvedMergedOverviewProviders(
+                activeProviders: self.overviewProviderIDs(enabledProviders: enabledProviders),
+                maxVisibleProviders: SettingsStore.mergedOverviewProviderLimit).isEmpty
+    }
+
+    func resolvedSwitcherSelection(
+        enabledProviders: [UsageProvider],
+        includesOverview: Bool) -> ProviderSwitcherSelection
+    {
+        if includesOverview, self.settings.mergedMenuLastSelectedWasOverview {
+            return .overview
+        }
+        let providerIDs = self.switcherProviderIDs(enabledFirstPartyProviders: enabledProviders)
+        let fallbackProviderID = (self.resolvedMenuProvider(enabledProviders: enabledProviders) ?? .codex).instanceID
+        let selectedProviderID = Self.resolvedSwitcherProviderID(
+            providerIDs: providerIDs,
+            selectedProviderID: self.selectedMenuProvider,
+            fallbackProviderID: fallbackProviderID)
+        return .provider(selectedProviderID)
+    }
+
+    func resolvedMergedMenuSelection(enabledProviders: [UsageProvider]) -> ProviderSwitcherSelection? {
+        guard self.shouldMergeIcons,
+              !self.switcherProviderIDs(enabledFirstPartyProviders: enabledProviders).isEmpty
+        else { return nil }
+        return self.resolvedSwitcherSelection(
+            enabledProviders: enabledProviders,
+            includesOverview: self.includesOverviewTab(enabledProviders: enabledProviders))
     }
 }

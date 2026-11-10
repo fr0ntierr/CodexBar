@@ -20,7 +20,7 @@ package final class ProcessPipeCapture: @unchecked Sendable {
     private var isStopped = false
     private var continuation: CheckedContinuation<Void, Never>?
     #if os(Linux)
-    private let callbackQueue = DispatchQueue(label: "com.steipete.CodexBar.process-pipe-capture.callback")
+    private let callbackQueue = DispatchQueue(label: "com.steipete.CodexBarLite.process-pipe-capture.callback")
     private var readerStarted = false
     private var readerExited = false
     private var callbackScheduled = false

@@ -508,7 +508,8 @@ struct ProviderPluginRuntimeTests {
                 const response = await ctx.http.getJSON(`${ctx.settings.get("BASE_URL")}/usage`);
                 return { primary: { usedPercent: response.json.used } };
                 """),
-            transport: Self.transport(recorder: requests, body: #"{"used":4}"#))
+            transport: Self.transport(recorder: requests, body: #"{"used":4}"#),
+            allowsDynamicID: true)
 
         let snapshot = try await runtime.fetchUsage(
             settings: ["BASE_URL": origin],
@@ -533,7 +534,8 @@ struct ProviderPluginRuntimeTests {
                 await ctx.http.getJSON(`${ctx.settings.get("BASE_URL")}/usage`);
                 return { primary: { usedPercent: 1 } };
                 """),
-            transport: Self.transport(recorder: requests))
+            transport: Self.transport(recorder: requests),
+            allowsDynamicID: true)
 
         await #expect(throws: ProviderPluginError.self) {
             _ = try await runtime.fetchUsage(
@@ -545,12 +547,6 @@ struct ProviderPluginRuntimeTests {
 
     @Test
     func `bundled private network policy is limited to providers with native parity`() throws {
-        _ = try ProviderPluginRuntime(source: Self.plugin(
-            id: "llmproxy",
-            endpoints: #"[{ setting: "BASE_URL", policy: "https-or-private-network-http" }]"#,
-            auth: "null",
-            settings: #"{ key: "BASE_URL", title: "Base URL", type: "plain" }"#))
-
         #expect(throws: ProviderPluginError.self) {
             _ = try ProviderPluginRuntime(source: Self.plugin(
                 endpoints: #"[{ setting: "BASE_URL", policy: "https-or-private-network-http" }]"#,
@@ -997,7 +993,7 @@ extension ProviderPluginRuntimeTests {
     #endif
 
     private static func plugin(
-        id: String = "synthetic",
+        id: String = "claude",
         endpoints: String = #"["https://api.example.test"]"#,
         auth: String = #"{ type: "bearer", secret: "TEST_KEY" }"#,
         settings: String = #"{ key: "TEST_KEY", title: "API key", type: "secure" }"#,

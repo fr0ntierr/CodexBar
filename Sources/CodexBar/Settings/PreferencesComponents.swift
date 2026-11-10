@@ -25,6 +25,18 @@ struct SettingsIconChip: View {
     }
 }
 
+struct FocusResigningBackground: View {
+    var body: some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .onTapGesture {
+                #if os(macOS)
+                NSApplication.shared.keyWindow?.makeFirstResponder(nil)
+                #endif
+            }
+    }
+}
+
 /// Two-line label for grouped-form rows that genuinely need a supporting sentence.
 struct SettingsRowLabel: View {
     @Environment(\.isEnabled) private var isEnabled

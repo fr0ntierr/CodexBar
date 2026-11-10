@@ -18,32 +18,24 @@ extension StatusItemController {
         var countdownResetDates: [Date] = []
         var absoluteResetDates: [Date] = []
         for provider in providers {
-            let resolution = self.renderedMenuBarLayoutResolution(forInstanceID: provider)
+            let resolution = self.renderedMenuBarLayoutResolution(for: provider)
             if !resolution.usesLegacyRendering,
                self.settings.menuBarIconStyle == .iconAndPercent
             {
-                if provider.firstPartyProvider == nil,
-                   self.store.menuBarSnapshot(for: provider)?.menuBarItems.isEmpty == false
-                {
-                    continue
-                }
-                countdownResetDates += self.menuBarLayoutResetDates(forInstanceID: provider, now: now, absolute: false)
-                absoluteResetDates += self.menuBarLayoutResetDates(forInstanceID: provider, now: now, absolute: true)
+                countdownResetDates += self.menuBarLayoutResetDates(for: provider, now: now, absolute: false)
+                absoluteResetDates += self.menuBarLayoutResetDates(for: provider, now: now, absolute: true)
                 delays += self.menuBarConditionalResetDelays(
                     provider: provider,
                     resolution: resolution,
                     now: now)
-                if let builtIn = provider.firstPartyProvider {
-                    delays += self.menuBarConditionalElapsedDelays(
-                        provider: builtIn, resolution: resolution, now: now)
-                }
+                delays += self.menuBarConditionalElapsedDelays(
+                    provider: provider, resolution: resolution, now: now)
                 continue
             }
 
             guard self.settings.menuBarShowsBrandIconWithPercent,
-                  displayMode == .resetTime || smartExhaustedActive,
-                  let builtIn = provider.firstPartyProvider else { continue }
-            let resetDates = self.menuBarDisplayedResetDates(for: builtIn, now: now)
+                  displayMode == .resetTime || smartExhaustedActive else { continue }
+            let resetDates = self.menuBarDisplayedResetDates(for: provider, now: now)
             switch self.settings.resetTimeDisplayStyle {
             case .countdown:
                 countdownResetDates.append(contentsOf: resetDates)
@@ -62,9 +54,9 @@ extension StatusItemController {
             // the reset itself, whichever comes first; the next icon update schedules any later boundary.
             delays.append(delay)
         }
-        delays += self.menuBarPaceRefreshDelays(providers: providers.compactMap(\.firstPartyProvider), now: now)
+        delays += self.menuBarPaceRefreshDelays(providers: providers, now: now)
 
-        if self.menuBarObservesCodexReset(providers: providers.compactMap(\.firstPartyProvider)) {
+        if self.menuBarObservesCodexReset(providers: providers) {
             let projection = self.store.codexConsumerProjection(surface: .menuBar, now: now)
             if let resetAt = projection.nextMenuBarStateChangeAt {
                 delays.append(max(
@@ -127,7 +119,7 @@ extension StatusItemController {
     /// their estimate drifts with usage rather than crossing a fixed instant, and
     /// `menuBarPaceRefreshDelays` already covers that lane.
     private func menuBarConditionalResetDelays(
-        provider: ProviderInstanceID,
+        provider: UsageProvider,
         resolution: MenuBarLayoutResolution,
         now: Date)
         -> [TimeInterval]
@@ -154,14 +146,16 @@ extension StatusItemController {
         }
     }
 
-    private func menuBarRefreshProviders() -> [ProviderInstanceID] {
+    private func menuBarRefreshProviders() -> [UsageProvider] {
         if let stackedProviders = self.stackedMergeIconProvidersIfActive() {
-            return [stackedProviders.top.instanceID, stackedProviders.bottom.instanceID]
+            return [stackedProviders.top, stackedProviders.bottom]
         }
         if self.shouldMergeIcons {
-            return [self.primaryProviderForUnifiedIcon()]
+            if let primary = self.primaryProviderForUnifiedIcon().firstPartyProvider {
+                return [primary]
+            }
         }
-        return UsageProvider.allCases.filter(self.isVisible).map(\.instanceID)
+        return UsageProvider.allCases.filter(self.isVisible)
     }
 
     private func menuBarObservesCodexReset(providers: [UsageProvider]) -> Bool {

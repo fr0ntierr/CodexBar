@@ -37,7 +37,7 @@ struct ProviderPluginMemoryTests {
             try autoreleasepool {
                 let engine = try JavaScriptCoreProviderPluginEngine.make(
                     source: """
-                    defineProvider({id: "synthetic", name: "Fixture", endpoints: ["https://example.test"],
+                    defineProvider({id: "claude", name: "Fixture", endpoints: ["https://example.test"],
                       settings: [], fetchUsage() { return {}; }});
                     """,
                     preludeSource: prelude,
@@ -75,7 +75,7 @@ struct ProviderPluginMemoryTests {
 
     private static let cookiePlugin = """
     defineProvider({
-      id: "synthetic", name: "Fixture", endpoints: ["https://example.test"], settings: [],
+      id: "claude", name: "Fixture", endpoints: ["https://example.test"], settings: [],
       capabilities: ["browser-cookies"], cookieDomains: ["example.test"],
       cookiePolicy: {selection: "request-url", cache: "validated-single-entry"},
       async fetchUsage(ctx) {

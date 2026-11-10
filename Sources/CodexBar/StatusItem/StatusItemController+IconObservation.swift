@@ -41,14 +41,7 @@ extension StatusItemController {
         for instanceID: ProviderInstanceID, showBrandPercent: Bool) -> String
     {
         guard let provider = instanceID.firstPartyProvider else {
-            let layout = showBrandPercent ? self.menuBarLayoutRenderData(for: instanceID, now: Date()).hashValue : 0
-            let signature = Self.pluginStoreIconObservationSignature(
-                for: instanceID,
-                snapshot: self.store.menuBarSnapshot(for: instanceID),
-                settings: self.settings,
-                hasError: self.store.errors[instanceID] != nil,
-                sourceHash: UserProviderPluginRegistry.plugin(for: instanceID)?.sourceHash ?? "")
-            return "\(signature)|layout=\(layout)"
+            return ""
         }
         let snapshot = self.menuBarUsageSource(for: provider).snapshot
         let style = self.store.style(for: provider)
@@ -95,26 +88,6 @@ extension StatusItemController {
             "estimated=\(snapshot?.dataConfidence == .estimated)",
             layoutSignature,
         ].joined(separator: "|")
-    }
-
-    static func pluginStoreIconObservationSignature(
-        for instanceID: ProviderInstanceID,
-        snapshot: UsageSnapshot?,
-        settings: SettingsStore,
-        hasError: Bool,
-        sourceHash: String) -> String
-    {
-        let preference = settings.menuBarShowsBrandIconWithPercent
-            ? MenuBarPercentWindowPreference.current(in: settings.menuBarLayout(forPlugin: instanceID)) ?? .automatic
-            : .automatic
-        let percent = Self.pluginSwitcherMetricPercent(
-            snapshot: snapshot, showUsed: settings.usageBarsShowUsed, preference: preference)
-        let icon = settings.menuBarShowsBrandIconWithPercent ? snapshot?.iconProvider?.rawValue ?? "" : ""
-        let summary = settings.menuBarShowsBrandIconWithPercent ? snapshot.map {
-            PluginMenuBarSummaryRenderer.elements(snapshot: $0, showUsed: settings.usageBarsShowUsed).hashValue
-        } : nil
-        return "\(instanceID.rawValue)|percent=\(Self.iconSignatureValue(percent))" +
-            "|error=\(hasError)|source=\(sourceHash)|icon=\(icon)|summary=\(summary ?? 0)"
     }
 
     private func storedMenuBarLayoutResetSignature(for provider: UsageProvider, snapshot: UsageSnapshot?) -> String? {

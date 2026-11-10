@@ -460,7 +460,7 @@ final class JavaScriptCoreProviderPluginEngine: ProviderPluginEngine, @unchecked
         enforcesUserResponsePolicy: Bool,
         allowsDynamicID: Bool) throws -> JavaScriptCoreProviderPluginEngine
     {
-        let queue = DispatchQueue(label: "com.steipete.codexbar.provider-plugin.\(UUID().uuidString)")
+        let queue = DispatchQueue(label: "com.steipete.codexbarlite.provider-plugin.\(UUID().uuidString)")
         return try queue.sync {
             try JavaScriptCoreProviderPluginEngine(
                 queue: queue,

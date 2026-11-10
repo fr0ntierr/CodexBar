@@ -47,13 +47,11 @@ final class ProviderSwitcherView: NSView {
 
     init(
         providers: [UsageProvider],
-        pluginProviders: [UserProviderPlugin] = [],
         selected: ProviderSwitcherSelection?,
         includesOverview: Bool,
         width: CGFloat,
         showsIcons: Bool,
         iconProvider: (UsageProvider) -> NSImage,
-        pluginIconProvider: (UserProviderPlugin) -> NSImage = { _ in NSImage() },
         weeklyRemainingProvider: @escaping (ProviderInstanceID) -> Double?,
         onSelect: @escaping (ProviderSwitcherSelection) -> Void)
     {
@@ -69,12 +67,6 @@ final class ProviderSwitcherView: NSView {
                 image: icon,
                 title: fullTitle)
         }
-        segments.append(contentsOf: pluginProviders.map { plugin in
-            Segment(
-                selection: .provider(plugin.manifest.id),
-                image: showsIcons ? Self.pluginSwitcherImage(plugin, iconProvider: pluginIconProvider) : nil,
-                title: plugin.manifest.name)
-        })
         if includesOverview {
             let overviewIcon = showsIcons ? Self.overviewIcon() : nil
             overviewIcon?.isTemplate = true

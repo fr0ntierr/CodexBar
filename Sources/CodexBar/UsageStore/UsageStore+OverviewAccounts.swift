@@ -37,8 +37,7 @@ extension UsageStore {
     func mergedOverviewRows(for providers: [ProviderInstanceID]) -> [MergedOverviewRow] {
         providers.flatMap { instanceID -> [MergedOverviewRow] in
             guard let provider = instanceID.firstPartyProvider else {
-                return UserProviderPluginRegistry.plugin(for: instanceID) == nil
-                    ? [] : [MergedOverviewRow(provider: instanceID, accountID: nil, model: nil)]
+                return []
             }
             if self.settings.mergedOverviewAllAccounts {
                 let accounts = self.mergedOverviewAccountRows(for: provider)

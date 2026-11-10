@@ -94,10 +94,7 @@ extension UsageStore {
         let tokenCostScopeChanged = self.invalidateCodexTokenSnapshotIfScopeChanged()
         guard forceInvalidation || accountChanged || tokenCostScopeChanged else { return false }
 
-        let preserveSessionQuotaTransitionState = !forceInvalidation &&
-            Self.codexSessionQuotaOwnersMatch(previousGuard, currentGuard)
-        self.clearCodexPublishedUsageState(
-            preserveSessionQuotaTransitionState: preserveSessionQuotaTransitionState)
+        self.clearCodexPublishedUsageState()
 
         self.credits = nil
         self.lastCreditsError = nil
@@ -131,7 +128,7 @@ extension UsageStore {
         return true
     }
 
-    func clearCodexPublishedUsageState(preserveSessionQuotaTransitionState: Bool = false) {
+    func clearCodexPublishedUsageState() {
         self.invalidateGenericWidgetUsage(for: .codex)
         self.snapshots.removeValue(forKey: .codex)
         self.errors[.codex] = nil
@@ -141,9 +138,6 @@ extension UsageStore {
         // Visible-account rows carry their own owner and are reconciled against the current projection.
         // Clearing selected-account state must not discard valid sibling rows.
         self.failureGates[.codex]?.reset()
-        if !preserveSessionQuotaTransitionState {
-            self.requireFreshCodexSessionQuotaBaseline()
-        }
         self.lastKnownResetSnapshots.removeValue(forKey: .codex)
         self.lastCodexUsagePublicationGuard = nil
     }
@@ -163,11 +157,7 @@ extension UsageStore {
             Self.codexScopedRefreshGuardsMatchAccount($0, currentGuard)
         }) == true
         else {
-            let preserveSessionQuotaTransitionState = Self.codexSessionQuotaOwnersMatch(
-                self.lastCodexUsagePublicationGuard,
-                currentGuard)
-            self.clearCodexPublishedUsageState(
-                preserveSessionQuotaTransitionState: preserveSessionQuotaTransitionState)
+            self.clearCodexPublishedUsageState()
             if persistWidgetSnapshot {
                 self.persistWidgetSnapshot(reason: "codex-account-invalidate")
             }

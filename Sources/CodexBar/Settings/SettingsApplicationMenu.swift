@@ -2,7 +2,7 @@ import AppKit
 
 @MainActor
 enum SettingsApplicationMenu {
-    static let fallbackItemIdentifier = NSUserInterfaceItemIdentifier("com.steipete.codexbar.settings-fallback")
+    static let fallbackItemIdentifier = NSUserInterfaceItemIdentifier("com.steipete.codexbarlite.settings-fallback")
 
     enum RepairResult: Equatable {
         case unchanged(isFallback: Bool)

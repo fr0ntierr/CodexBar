@@ -220,8 +220,6 @@ extension UsageStore {
                         for: account,
                         priorSnapshot: priorSnapshot,
                         activeVisibleAccountID: originalVisibleAccountID))
-            self.handleCodexCredentialOutcome(
-                outcome, account: account, snapshot: resolved.usage, projection: currentProjection)
             if let snapshot = resolved.snapshot {
                 snapshots.append(CodexAccountUsageSnapshot(
                     account: snapshot.account,
@@ -895,7 +893,6 @@ extension UsageStore {
             .generation
         let contextConfigRevision = self.settings.providerConfigRevision(for: provider)
         let originalAccountToken = account?.token
-        let originalManualToken = provider == .stepfun ? self.settings.stepfunToken : nil
         return ProviderFetchContext(
             runtime: .app,
             sourceMode: sourceMode,
@@ -937,31 +934,8 @@ extension UsageStore {
                         generation: publicationGeneration)
                 }
             },
-            providerManualTokenUpdater: { [weak self] provider, token in
-                await MainActor.run {
-                    guard let self, provider == .stepfun,
-                          self.settings.stepfunToken == originalManualToken
-                    else { return }
-                    guard
-                        self.providerConfigMutationIsCurrent(
-                            provider: provider,
-                            generation: publicationGeneration,
-                            originalConfigRevision: contextConfigRevision)
-                    else { return }
-                    self.settings.stepfunToken = token
-                    self.advanceProviderRefreshConfigRevision(
-                        provider: provider,
-                        generation: publicationGeneration)
-                }
-            },
-            settingsWriter: { [weak self] provider, values in
-                guard let self, provider == contextProvider else { return .stale }
-                return await self.persistPluginSettings(
-                    provider: provider,
-                    values: values,
-                    generation: publicationGeneration,
-                    originalConfigRevision: contextConfigRevision)
-            },
+            providerManualTokenUpdater: nil,
+            settingsWriter: nil,
             costUsageHistoryDays: self.settings.costUsageHistoryDays,
             claudeOwnerCLIRecoveryOnly: claudeOwnerCLIRecoveryOnly,
             persistsCLISessions: true,
@@ -1210,15 +1184,10 @@ extension UsageStore {
         account: ProviderTokenAccount,
         priorSnapshot: TokenAccountUsageSnapshot? = nil) -> ResolvedAccountOutcome
     {
-        self.handleCredentialOutcome(
-            provider: provider,
-            account: Self.warningTokenAccountDiscriminator(account) ?? "default",
-            result: outcome.result)
         switch outcome.result {
         case let .success(result):
             let scoped = result.usage.scoped(to: provider)
-            let current = self.resolvingCurrentCopilotAllowance(in: scoped, provider: provider, account: account)
-            let labeled = current.withAccountLabel(account.label, for: provider)
+            let labeled = scoped.withAccountLabel(account.label, for: provider)
             let snapshot = TokenAccountUsageSnapshot(
                 account: account,
                 snapshot: labeled,
@@ -1257,7 +1226,7 @@ extension UsageStore {
               let current = self.uniqueTokenAccount(provider: provider, accountID: account.id),
               snapshot.cacheKey == self.tokenAccountSnapshotCacheKey(provider: provider, account: current)
         else { return nil }
-        return self.resolvingCurrentCopilotAllowance(in: snapshot, provider: provider, account: current)
+        return snapshot
     }
 
     private static func preservesClaudeOAuthSnapshot(
@@ -1394,7 +1363,6 @@ extension UsageStore {
         case let .success(result):
             guard let snapshot else { return }
             let publicationGuard = Self.codexScopedRefreshGuard(for: account)
-            let codexOwnerKey = Self.codexSessionQuotaOwnerKey(for: publicationGuard)
             self.lastFetchAttempts[.codex] = outcome.attempts
             let publishedCredits = self.codexAccountSnapshots.first(where: { $0.id == account.id })?.credits
                 ?? result.credits
@@ -1410,20 +1378,6 @@ extension UsageStore {
                 self.lastCreditsSnapshotOwnerGuard = publicationGuard
                 self.lastCreditsSource = publishedCredits == nil ? .none : .api
             }
-            self.handleCodexResetCreditNotifications(snapshot: snapshot)
-            self.handleQuotaWarningTransitions(
-                provider: .codex,
-                snapshot: snapshot,
-                accountDiscriminator: codexOwnerKey?.rawValue)
-            self.handleUpcomingResetWarning(
-                provider: .codex,
-                snapshot: snapshot,
-                accountDiscriminator: codexOwnerKey?.rawValue)
-            let sessionRestored = self.handleSessionQuotaTransition(
-                provider: .codex,
-                snapshot: snapshot,
-                codexOwnerKey: codexOwnerKey)
-            self.handlePredictivePaceWarningTransitions(provider: .codex, snapshot: snapshot)
             self.lastKnownResetSnapshots[.codex] = snapshot
             self.lastCodexUsagePublicationGuard = publicationGuard
             self.lastCodexAccountScopedRefreshGuard = publicationGuard
@@ -1438,13 +1392,8 @@ extension UsageStore {
             await self.recordPlanUtilizationHistorySample(
                 provider: .codex,
                 snapshot: snapshot,
-                codexLimitResetOwnerKey: limitResetOwnerKey,
-                sessionRestoredNotificationPending: sessionRestored)
+                codexLimitResetOwnerKey: limitResetOwnerKey)
             guard self.isCurrentProviderRefreshGeneration(.codex, generation: generation) else { return }
-            self.emitUsageUpdatedHook(
-                provider: .codex,
-                snapshot: snapshot,
-                rateKey: codexOwnerKey?.rawValue)
             self.recordCodexHistoricalSampleIfNeeded(snapshot: snapshot)
         case let .failure(error):
             guard self.tokenAccountErrorMessage(error) != nil else {
@@ -1479,19 +1428,14 @@ extension UsageStore {
             return
         }
         self.lastFetchAttempts[provider.instanceID] = outcome.attempts
-        self.handleCredentialOutcome(
-            provider: provider,
-            account: Self.warningTokenAccountDiscriminator(account) ?? "default",
-            result: outcome.result)
         switch outcome.result {
         case let .success(result):
             let scoped = result.usage.scoped(to: provider)
-            let current = self.resolvingCurrentCopilotAllowance(in: scoped, provider: provider, account: account)
             let labeled: UsageSnapshot =
                 if let account {
-                    current.withAccountLabel(account.label, for: provider)
+                    scoped.withAccountLabel(account.label, for: provider)
                 } else {
-                    current
+                    scoped
                 }
             let profileStable =
                 provider == .deepseek
@@ -1500,21 +1444,6 @@ extension UsageStore {
                     : labeled
             let backfilled = profileStable.backfillingResetTimes(
                 from: self.lastKnownResetSnapshots[provider.instanceID])
-            let warningAccountDiscriminator = Self.warningTokenAccountDiscriminator(account)
-            self.handleQuotaWarningTransitions(
-                provider: provider,
-                snapshot: backfilled,
-                accountDiscriminator: warningAccountDiscriminator)
-            self.handleUpcomingResetWarning(
-                provider: provider,
-                snapshot: backfilled,
-                accountDiscriminator: warningAccountDiscriminator)
-            let sessionRestored = self.handleSessionQuotaTransition(
-                provider: provider, snapshot: backfilled, accountDiscriminator: warningAccountDiscriminator)
-            self.handlePredictivePaceWarningTransitions(
-                provider: provider,
-                snapshot: backfilled,
-                accountDiscriminatorOverride: provider == .claude ? warningAccountDiscriminator : nil)
             self.lastKnownResetSnapshots[provider.instanceID] = backfilled
             self.snapshots[provider.instanceID] = backfilled
             self.widgetUsagePreservationBlockedProviders.remove(provider.instanceID)
@@ -1534,13 +1463,8 @@ extension UsageStore {
             await self.recordPlanUtilizationHistorySample(
                 provider: provider,
                 snapshot: backfilled,
-                account: account,
-                sessionRestoredNotificationPending: sessionRestored)
+                account: account)
             guard self.isCurrentProviderRefreshGeneration(provider, generation: generation) else { return }
-            self.emitUsageUpdatedHook(
-                provider: provider.instanceID,
-                snapshot: backfilled,
-                rateKey: warningAccountDiscriminator)
         case let .failure(error):
             let prior = account.flatMap {
                 self.matchingTokenAccountSnapshot(fallbackAccountSnapshot, provider: provider, account: $0)

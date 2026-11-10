@@ -45,8 +45,6 @@ extension UsageStore {
         guard Self.usesSpendDashboardIndependentTokenSnapshot(provider),
               self.settings.isCostUsageEffectivelyEnabled(for: provider), self.isEnabled(provider)
         else { return false }
-        // Provider-specific by design: Cursor Off has no independent cost source to refresh.
-        if provider == .cursor, self.settings.cursorCookieSource == .off { return false }
         let trigger = self.spendDashboardTokenRefreshTrigger(for: provider)
         // A failed attempt is not an acknowledgment. Retry on new data or explicit refresh, not observation churn.
         guard self.spendDashboardTokenFailedTriggers[provider.instanceID] != trigger else { return false }
@@ -79,24 +77,13 @@ extension UsageStore {
             return
         }
 
-        // Provider-specific by design: Cursor Off skips dashboard cost the same way status fetching does.
-        if provider == .cursor, self.settings.cursorCookieSource == .off {
-            self.clearSpendDashboardTokenSnapshot(for: provider)
-            return
-        }
-
         guard await self.refreshPiHistoryScope(for: provider) else { return }
 
         guard !self.spendDashboardTokenRefreshInFlight.contains(provider.instanceID) else { return }
 
         let now = Date()
         let historyDays = SpendDashboardSource.scanDays
-        guard case let .proceed(cursorCookieHeaderOverride) = self.prepareCursorCostCookie(for: provider) else {
-            self.clearSpendDashboardTokenSnapshot(for: provider)
-            self.spendDashboardTokenFailedTriggers[provider.instanceID] = self.spendDashboardTokenRefreshTrigger(
-                for: provider)
-            return
-        }
+        let cursorCookieHeaderOverride: String? = nil
         let costScope = self.tokenCostScope(for: provider)
         let costScopeSignature = self.spendDashboardTokenSnapshotScopeSignature(for: provider)
         let publicationRevision = self.providerPublicationRevision(for: provider)
@@ -248,19 +235,6 @@ extension UsageStore {
             return false
         }
         let currentSignature = self.spendDashboardTokenSnapshotScopeSignature(for: provider)
-        // Provider-specific by design: Cursor auto cookies complete the spend scope with the fetched fingerprint.
-        if provider == .cursor,
-           self.settings.cursorCookieSource == .auto,
-           costScopeSignature.contains("|cursorCookie=auto:"),
-           let fetchedCredentialScopeFingerprint
-        {
-            let resolvedSignature = self.cursorCostScopeSignature(
-                historyDays: SpendDashboardSource.scanDays,
-                source: .auto,
-                credentialFingerprint: fetchedCredentialScopeFingerprint,
-                includeSettingsRevision: false)
-            return currentSignature == resolvedSignature
-        }
         return currentSignature == costScopeSignature
     }
 

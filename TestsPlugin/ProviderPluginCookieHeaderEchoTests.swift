@@ -44,7 +44,7 @@ struct ProviderPluginCookieHeaderEchoTests {
     {
         #expect(throws: ProviderPluginError.self) {
             try ProviderPluginRuntime(source: """
-            defineProvider({id:'longcat',name:'Synthetic',settings:[],endpoints:['https://example.test'],
+            defineProvider({id:'claude',name:'Synthetic',settings:[],endpoints:['https://example.test'],
               capabilities:['browser-cookies'],cookieDomains:['example.test'],
               cookiePolicy:{selection:'request-url',cache:'nonpersistent',requiredCookies:['csrf'],headerEcho:\(echo)},
               async fetchUsage(){return {empty:true}}});
@@ -199,7 +199,7 @@ struct ProviderPluginCookieHeaderEchoTests {
         -> ProviderPluginRuntime
     {
         try ProviderPluginRuntime(source: """
-        defineProvider({id:'longcat',name:'Synthetic',settings:[],
+        defineProvider({id:'claude',name:'Synthetic',settings:[],
           endpoints:['https://example.test','https://example.test:444','https://other.test'],
           capabilities:['browser-cookies'],cookieDomains:['example.test','other.test'],
           cookiePolicy:{selection:'request-url',cache:'nonpersistent',requiredCookies:['csrf'],

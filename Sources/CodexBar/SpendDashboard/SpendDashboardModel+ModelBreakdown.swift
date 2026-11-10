@@ -286,7 +286,7 @@ extension SpendDashboardModel {
         _ entry: CostUsageDailyReport.Entry) -> Bool
     {
         switch provider {
-        case .codex, .cursor:
+        case .codex:
             self.hasExplicitlyUnpriceableCodexCost(entry)
         default:
             false

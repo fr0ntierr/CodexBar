@@ -2,6 +2,23 @@ import CodexBarCore
 import Foundation
 
 extension UsageStore {
+    struct ProviderRefreshOutcomeContext {
+        let generation: UInt64
+        let includesCredits: Bool
+        let claudeUsesConsumerAutoPipeline: Bool
+        let codexExpectedGuard: CodexAccountScopedRefreshGuard?
+        let tokenAccount: ProviderTokenAccount?
+        let priorTokenAccountSnapshot: TokenAccountUsageSnapshot?
+        let codexLimitResetOwnerKey: CodexLimitResetOwnerKey?
+        let claudeOAuthHistoryPersistentRefHash: String?
+        let claudeOAuthActiveAccountObservation: ClaudeOAuthActiveAccountObservation
+        var claudeCredentialFingerprint: String?
+
+        var codexSessionQuotaOwnerKey: CodexSessionQuotaOwnerKey? {
+            UsageStore.codexSessionQuotaOwnerKey(for: self.codexExpectedGuard)
+        }
+    }
+
     private struct CodexRefreshPublicationPreparation {
         let expectedGuard: CodexAccountScopedRefreshGuard
         let limitResetOwnerKey: CodexLimitResetOwnerKey?
@@ -46,23 +63,7 @@ extension UsageStore {
         current: UsageSnapshot,
         previous: UsageSnapshot?) -> UsageSnapshot
     {
-        let previousProvesPaidDepletion = previous?.commandCodeHasSubscriptionPlan == true ||
-            (previous?.commandCodeSubscriptionEnrichmentUnavailable == true &&
-                previous?.commandCodeMonthlyGrantDepleted == true &&
-                previous?.tertiary?.usedPercent == 100)
-        guard current.commandCodeSubscriptionEnrichmentUnavailable,
-              current.commandCodeMonthlyGrantDepleted,
-              previousProvesPaidDepletion,
-              let previousMonthly = previous?.tertiary
-        else {
-            return current
-        }
-        let depleted = RateWindow(
-            usedPercent: 100,
-            windowMinutes: previousMonthly.windowMinutes,
-            resetsAt: previousMonthly.resetsAt,
-            resetDescription: previousMonthly.resetDescription)
-        return current.with(tertiary: depleted)
+        current
     }
 
     func refreshForSettingsChange() async {
@@ -79,11 +80,6 @@ extension UsageStore {
         // Provider-specific by design: Codex active-source correction reconciles managed profile filesystem state.
         guard provider == nil || provider == .codex else { return }
         _ = self.settings.persistResolvedCodexActiveSourceCorrectionIfNeeded()
-    }
-
-    /// Force refresh Augment session (called from UI button)
-    func forceRefreshAugmentSession() async {
-        await self.performRuntimeAction(.forceSessionRefresh, for: .augment)
     }
 
     private func providerRefreshSpec(_ provider: UsageProvider) async -> ProviderSpec? {
@@ -317,16 +313,6 @@ extension UsageStore {
             return nil
         } else if provider == .codex {
             self.reconcileCodexWidgetAccountSnapshots()
-        }
-
-        if provider == .kilo, self.shouldFanOutKiloScopes() {
-            await self.refreshKiloScopes(generation: generation)
-            guard self.isCurrentProviderRefreshGeneration(provider, generation: generation) else { return nil }
-            // Continue to also fetch the personal snapshot through the regular path
-            // so the existing single-card render keeps working when only personal is shown.
-            // The presence of multi-element kiloScopeSnapshots triggers stacked rendering.
-        } else if provider == .kilo {
-            await MainActor.run { self.kiloScopeSnapshots = [] }
         }
 
         if provider == .claude {
@@ -681,12 +667,8 @@ extension UsageStore {
             } else {
                 self.lastKnownResetSnapshots[provider.instanceID]
             }
-            // Resolve display-only allowances after any suspended request has completed.
-            let allowanceCurrent = self.resolvingCurrentCopilotAllowance(in: accountScoped, provider: provider)
             let backfilled = self.preparePublishedSnapshot(
-                allowanceCurrent, provider: provider, resetBackfillSource: resetBackfillSource, context: context)
-            let notifications = self.handleProviderRefreshNotifications(
-                provider: provider, result: result, snapshot: backfilled, context: context)
+                accountScoped, provider: provider, resetBackfillSource: resetBackfillSource, context: context)
             self.lastKnownResetSnapshots[provider.instanceID] = backfilled
             self.snapshots[provider.instanceID] = backfilled
             self.widgetUsagePreservationBlockedProviders.remove(provider.instanceID)
@@ -697,11 +679,6 @@ extension UsageStore {
                 self.publishTokenSnapshot(tokenSnapshot, for: provider)
                 self.tokenErrors[provider.instanceID] = nil
                 self.tokenFailureGates[provider.instanceID]?.recordSuccess()
-            } else if provider == .xai, XAICostUsageMapping.isAnalyticsUnavailable(backfilled) {
-                // Provider-specific by design: prepaid balance without usage history is unavailable,
-                // not a confirmed-empty $0 spend row.
-                self.clearTokenSnapshot(for: provider)
-                self.tokenErrors[provider.instanceID] = nil
             } else if Self.tokenCostRequiresProviderSnapshot(provider) {
                 self.publishConfirmedEmptyTokenSnapshot(for: provider)
                 self.tokenErrors[provider.instanceID] = nil
@@ -727,11 +704,7 @@ extension UsageStore {
                 backfilled: backfilled,
                 result: result,
                 context: context)
-            self.emitUsageUpdatedHook(
-                provider: provider.instanceID,
-                snapshot: backfilled,
-                rateKey: notifications.account)
-            return (backfilled, notifications.sessionRestored)
+            return (backfilled, false)
         }
         guard let publication else { return }
         let backfilled = publication.snapshot
@@ -762,8 +735,7 @@ extension UsageStore {
                         && claudeOAuthPersistentRefHash == nil)),
             claudeOAuthActiveAccountObservation: context.claudeOAuthActiveAccountObservation,
             isClaudeOAuthSample: isClaudeOAuthSample,
-            codexLimitResetOwnerKey: context.codexLimitResetOwnerKey,
-            sessionRestoredNotificationPending: publication.sessionRestored)
+            codexLimitResetOwnerKey: context.codexLimitResetOwnerKey)
         guard self.isCurrentProviderRefreshGeneration(provider, generation: context.generation) else { return }
         if let runtime = self.providerRuntimes[provider.instanceID] {
             let runtimeContext = ProviderRuntimeContext(
@@ -803,10 +775,6 @@ extension UsageStore {
         if provider == .deepseek {
             self.markDeepSeekProfileTransitionUnavailable()
         }
-        self.handleCredentialOutcome(
-            provider: provider,
-            account: self.credentialAccount(provider: provider, context: context),
-            result: .failure(error))
         self.bindCodexFailurePublicationOwner(
             provider: provider,
             expectedGuard: context.codexExpectedGuard)
@@ -1295,10 +1263,6 @@ extension UsageStore {
         self.tokenErrors[.claude] = nil
         self.failureGates[.claude]?.reset()
         self.tokenFailureGates[.claude]?.reset()
-        self.clearSessionQuotaTransitionState(provider: .claude)
-        self.quotaWarningState = self.quotaWarningState.filter {
-            $0.key.provider != .claude || $0.key.accountDiscriminator != nil
-        }
         self.lastTokenFetchAt.removeValue(forKey: .claude)
     }
 
@@ -1308,14 +1272,8 @@ extension UsageStore {
         attempts: [ProviderFetchAttempt],
         context: ProviderRefreshOutcomeContext) async
     {
-        // Provider-specific by design: Grok's local fallback scans off the main thread when remote billing fails.
-        let grokLocalFallback: CostUsageTokenSnapshot? = if provider == .grok {
-            try? await self.loadGrokLocalTokenSnapshot(historyDays: SpendDashboardSource.scanDays)
-        } else {
-            nil
-        }
+        let grokLocalFallback: CostUsageTokenSnapshot? = nil
         guard !Task.isCancelled else { return }
-        let shouldNotifyPermissionPrompt = Self.isPermissionPromptWaiting(error)
         await MainActor.run {
             guard self.isCurrentProviderRefreshGeneration(provider, generation: context.generation) else { return }
             // Local Grok tokens remain fresh even when a billing outage retains an older quota snapshot.
@@ -1380,8 +1338,6 @@ extension UsageStore {
                 // Drop prior limits immediately so an Education subscription notice cannot leave stale bars visible.
                 self.snapshots.removeValue(forKey: provider.instanceID)
                 self.lastKnownResetSnapshots.removeValue(forKey: provider.instanceID)
-                self.clearSessionQuotaTransitionState(provider: provider)
-                self.quotaWarningState = self.quotaWarningState.filter { $0.key.provider != provider.instanceID }
                 self.lastSourceLabels.removeValue(forKey: provider.instanceID)
                 self.errors[provider.instanceID] = nil
                 self.knownLimitsAvailabilityByProvider[provider.instanceID] = .unavailable
@@ -1445,15 +1401,8 @@ extension UsageStore {
                         self.clearTokenSnapshot(for: provider)
                     }
                 }
-                self.emitHook(
-                    .refreshFailed,
-                    provider: provider.instanceID,
-                    status: Self.refreshFailureHookStatus(error))
             } else {
                 self.errors[provider.instanceID] = nil
-            }
-            if shouldNotifyPermissionPrompt {
-                self.postPermissionPromptNotificationIfNeeded(provider: provider, error: error)
             }
         }
         guard self.isCurrentProviderRefreshGeneration(provider, generation: context.generation) else { return }

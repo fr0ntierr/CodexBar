@@ -29,7 +29,7 @@ private func appLanguageDefaults() -> UserDefaults {
         return .standard
     }
     // Fallback for running outside a .app bundle (swift run / debug builds)
-    return UserDefaults(suiteName: "CodexBar") ?? .standard
+    return UserDefaults(suiteName: "CodexBarLite") ?? .standard
 }
 
 private let isRunningTestsProcessAtStartup = TestProcessSafety.isRunning
@@ -121,6 +121,14 @@ private func resolveLocalizationResourceBundle(mainBundle: Bundle, bundleName: S
         return bundle
     }
 
+    for altName in ["CodexBar_CodexBar", "CodexBarLite_CodexBar"] {
+        if let url = mainBundle.url(forResource: altName, withExtension: "bundle"),
+           let bundle = Bundle(url: url)
+        {
+            return bundle
+        }
+    }
+
     if let resourceURL = mainBundle.resourceURL?.absoluteURL,
        let bundle = Bundle(url: resourceURL.appendingPathComponent("\(bundleName).bundle"))
     {
@@ -128,6 +136,26 @@ private func resolveLocalizationResourceBundle(mainBundle: Bundle, bundleName: S
     }
 
     return mainBundle
+}
+
+private func availableLocalizations(in resourceBundle: Bundle) -> [String] {
+    var result = Set(resourceBundle.localizations.filter { $0 != "Base" })
+    if let subfolderURLs = resourceBundle.urls(forResourcesWithExtension: "lproj", subdirectory: "Resources") {
+        for url in subfolderURLs {
+            result.insert(url.deletingPathExtension().lastPathComponent)
+        }
+    }
+    if resourceBundle !== Bundle.main {
+        for loc in Bundle.main.localizations where loc != "Base" {
+            result.insert(loc)
+        }
+        if let mainURLs = Bundle.main.urls(forResourcesWithExtension: "lproj", subdirectory: nil) {
+            for url in mainURLs {
+                result.insert(url.deletingPathExtension().lastPathComponent)
+            }
+        }
+    }
+    return Array(result)
 }
 
 private func localizedBundle() -> Bundle {
@@ -151,7 +179,7 @@ private func resolveLocalizedBundle(forLanguage language: String) -> Bundle {
         }
     } else {
         // System mode: follow macOS language preferences
-        let localizations = resourceBundle.localizations.filter { $0 != "Base" }
+        let localizations = availableLocalizations(in: resourceBundle)
         let preferred = Bundle.preferredLocalizations(
             from: localizations,
             forPreferences: Locale.preferredLanguages).first
@@ -162,18 +190,39 @@ private func resolveLocalizedBundle(forLanguage language: String) -> Bundle {
         }
     }
     // Fallback to en.lproj
-    if let path = resourceBundle.path(forResource: "en", ofType: "lproj"),
-       let bundle = Bundle(path: path)
-    {
+    if let bundle = lprojBundle(named: "en", in: resourceBundle) {
         return bundle
     }
     return resourceBundle
 }
 
 private func lprojBundle(named language: String, in resourceBundle: Bundle) -> Bundle? {
-    let candidates = [language, language.lowercased()]
+    var candidates = [language, language.lowercased()]
+    let lower = language.lowercased()
+    if lower == "zh-cn" || lower == "zh-sg" || lower == "zh" {
+        candidates.append("zh-Hans")
+    } else if lower == "zh-tw" || lower == "zh-hk" || lower == "zh-mo" {
+        candidates.append("zh-Hant")
+    }
     for candidate in candidates where !candidate.isEmpty {
         if let path = resourceBundle.path(forResource: candidate, ofType: "lproj"),
+           let bundle = Bundle(path: path)
+        {
+            return bundle
+        }
+        if let path = resourceBundle.path(forResource: candidate, ofType: "lproj", inDirectory: "Resources"),
+           let bundle = Bundle(path: path)
+        {
+            return bundle
+        }
+        if resourceBundle !== Bundle.main,
+           let path = Bundle.main.path(forResource: candidate, ofType: "lproj"),
+           let bundle = Bundle(path: path)
+        {
+            return bundle
+        }
+        if resourceBundle !== Bundle.main,
+           let path = Bundle.main.path(forResource: candidate, ofType: "lproj", inDirectory: "Resources"),
            let bundle = Bundle(path: path)
         {
             return bundle

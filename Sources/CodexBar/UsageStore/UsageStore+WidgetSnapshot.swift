@@ -42,9 +42,6 @@ extension UsageStore {
         let snapshot = self.makeWidgetSnapshot(previousSnapshot: previousSnapshot)
         self.lastQueuedWidgetSnapshot = snapshot
         self.invalidatedQueuedWidgetProviders = self.widgetUsagePreservationBlockedProviders
-        NotificationCenter.default.post(
-            name: .codexbarUsageSnapshotsDidChange,
-            object: UsageSnapshotsDidChangeEvent(snapshots: self.cloudSyncAccountSnapshots()))
         let previousTask = self.widgetSnapshotPersistTask
         self.widgetSnapshotPersistTask = Task { @MainActor in
             _ = await previousTask?.result
@@ -104,108 +101,6 @@ extension UsageStore {
         #if canImport(WidgetKit)
         WidgetCenter.shared.reloadAllTimelines()
         #endif
-    }
-
-    /// Builds outbound snapshots only from this Mac's UsageStore; remote fleet snapshots live in CloudSyncState.
-    func cloudSyncAccountSnapshots() -> [AccountSnapshotSyncPayload] {
-        let deviceID = self.settings.iCloudSyncDeviceID
-        var payloads: [String: AccountSnapshotSyncPayload] = [:]
-
-        for (instanceID, usage) in self.snapshots {
-            guard instanceID.firstPartyProvider.map(Self.requiresBrowserSession) != true else { continue }
-            let identity = usage.identity?.accountID ?? usage.identity?.accountEmail
-            let label = usage.identity?.accountEmail
-                ?? usage.identity?.accountOrganization
-                ?? instanceID.firstPartyProvider
-                .map { ProviderDescriptorRegistry.descriptor(for: $0).metadata.displayName }
-                ?? instanceID.rawValue
-            let payload = AccountSnapshotSyncPayload(
-                provider: instanceID,
-                deviceID: deviceID,
-                accountIdentity: identity,
-                displayLabel: label,
-                usage: usage)
-            payloads[payload.recordName] = payload
-        }
-
-        for (provider, accountSnapshots) in self.accountSnapshots {
-            guard provider.firstPartyProvider.map(Self.requiresBrowserSession) != true else { continue }
-            for accountSnapshot in accountSnapshots {
-                guard let usage = accountSnapshot.snapshot else { continue }
-                let identity = usage.identity?.accountID
-                    ?? usage.identity?.accountEmail
-                    ?? accountSnapshot.account.externalIdentifier
-                    ?? accountSnapshot.account.id.uuidString
-                let payload = AccountSnapshotSyncPayload(
-                    provider: provider,
-                    deviceID: deviceID,
-                    accountIdentity: identity,
-                    displayLabel: accountSnapshot.account.displayName,
-                    usage: usage)
-                payloads[payload.recordName] = payload
-            }
-        }
-
-        for accountSnapshot in self.claudeSwapAccountSnapshots {
-            guard let usage = accountSnapshot.snapshot else { continue }
-            let identity = usage.identity?.accountID
-                ?? usage.identity?.accountEmail
-                ?? "\(accountSnapshot.id.source):\(accountSnapshot.id.opaqueID)"
-            let payload = AccountSnapshotSyncPayload(
-                provider: accountSnapshot.provider.instanceID,
-                deviceID: deviceID,
-                accountIdentity: identity,
-                displayLabel: accountSnapshot.accountEmail ?? "Account \(accountSnapshot.id.opaqueID)",
-                usage: usage)
-            payloads[payload.recordName] = payload
-        }
-
-        return payloads.values.sorted { $0.recordName < $1.recordName }
-    }
-
-    func cloudSyncLocalAccountKeys(for provider: UsageProvider) -> Set<String> {
-        let snapshotKeys = self.cloudSyncAccountSnapshots().filter { $0.provider == provider.instanceID }
-            .map(\.accountKey)
-        var identities = Set(snapshotKeys)
-        var hasDefaultCodexSnapshot = false
-        func insert(_ identity: String?) {
-            guard let identity else { return }
-            identities.insert(AccountSnapshotSyncPayload.accountKey(for: identity))
-        }
-        for accountSnapshot in self.accountSnapshots[provider.instanceID] ?? [] {
-            insert(accountSnapshot.snapshot?.identity?.accountID)
-            insert(accountSnapshot.snapshot?.identity?.accountEmail)
-            insert(accountSnapshot.account.externalIdentifier)
-            insert(accountSnapshot.account.id.uuidString)
-        }
-        for account in self.settings.tokenAccounts(for: provider) {
-            insert(account.externalIdentifier)
-            insert(account.id.uuidString)
-        }
-        // Provider-specific by design: Claude swap subprocesses own extra IDs; Codex alone has scoped account info.
-        if provider == .claude {
-            for accountSnapshot in self.claudeSwapAccountSnapshots {
-                insert(accountSnapshot.snapshot?.identity?.accountID)
-                insert(accountSnapshot.snapshot?.identity?.accountEmail)
-                insert("\(accountSnapshot.id.source):\(accountSnapshot.id.opaqueID)")
-            }
-        }
-        if provider == .codex {
-            if let projection = self.settings.codexVisibleAccountProjectionForMenuDisplay {
-                for account in projection.visibleAccounts {
-                    insert(account.workspaceAccountID)
-                    insert(account.email)
-                    insert(account.id)
-                    insert(account.storedAccountID?.uuidString)
-                }
-            }
-            hasDefaultCodexSnapshot = snapshotKeys.contains(AccountSnapshotSyncPayload.accountKey(for: nil))
-        }
-        if (identities.isEmpty && self.metadata(for: provider).usesAccountFallback) || hasDefaultCodexSnapshot {
-            let fallback = self.accountInfo(for: provider)
-            insert(fallback.email)
-        }
-        return identities
     }
 
     func invalidateGenericWidgetUsage(for provider: UsageProvider) {
@@ -326,23 +221,16 @@ extension UsageStore {
             creditsRemaining = nil
             codeReviewRemaining = nil
         }
-        let providerCost: ProviderCostSnapshot? = if provider == .devin,
-                                                     self.settings.showOptionalCreditsAndExtraUsage
-        {
-            snapshot?.providerCost
-        } else {
-            nil
-        }
-        // Provider-specific by design: DeepSeek and OpenRouter expose their widget value as balance text.
+        let providerCost: ProviderCostSnapshot? = nil
+        // Provider-specific by design: DeepSeek exposes its widget value as balance text.
         let balanceText: String? = switch provider {
-        case .deepseek, .openrouter:
+        case .deepseek:
             MenuBarLayoutBalanceResolver.balance(provider: provider, snapshot: snapshot)
         default:
             nil
         }
 
-        // Provider-specific by design: Pi's local strategy has no quota measurement; age belongs to its history.
-        let historyUpdatedAt = provider == .pi ? tokenSnapshot?.updatedAt : nil
+        let historyUpdatedAt: Date? = nil
         return WidgetSnapshot.ProviderEntry(
             provider: provider,
             updatedAt: historyUpdatedAt ?? snapshot?.updatedAt ?? preservedClaudeUsage?.updatedAt
@@ -421,10 +309,7 @@ extension UsageStore {
         guard let snapshot else { return nil }
         let fallbackTokens = CheckedSum.integers(snapshot.daily.compactMap(\.totalTokens))
             .flatMap { $0 > 0 ? $0 : nil }
-        let sessionLabel = switch provider {
-        case .bedrock, .mistral: "Latest billing day"
-        default: "Today"
-        }
+        let sessionLabel = "Today"
         let defaultMonthLabel = snapshot.historyDays == 1 ? "Today" : "\(snapshot.historyDays)d"
         let monthLabel = snapshot.historyLabel ?? defaultMonthLabel
         let estimateSuffix = provider == .codex ? " API est. · not billed" : ""
@@ -444,20 +329,6 @@ extension UsageStore {
         snapshot: UsageSnapshot,
         metadata: ProviderMetadata?) -> String
     {
-        let dynamicTitle: String? = switch provider {
-        // Legacy request-based Cursor plans track a request quota, not the token-based "Total" pool.
-        case .cursor where snapshot.detailRow(label: "Request quota") != nil: "Requests"
-        case .cursor: CursorProviderDescriptor.primaryLabel(snapshot: snapshot)
-        case .grok: GrokProviderDescriptor.displayLabel(window: snapshot.primary)
-        case .doubao: DoubaoProviderDescriptor.primaryLabel(window: snapshot.primary)
-        case .amp: AmpProviderDescriptor.primaryLabel(snapshot: snapshot)
-        case .alibabatokenplan: AlibabaTokenPlanProviderDescriptor.primaryLabel(window: snapshot.primary)
-        case .ollama: OllamaProviderDescriptor.primaryLabel(window: snapshot.primary)
-        default: nil
-        }
-        if let dynamicTitle {
-            return dynamicTitle
-        }
         guard let metadata else { return "Session" }
         return ProviderDescriptorRegistry.descriptor(for: provider).presentation
             .rateWindowLabels(metadata: metadata, snapshot: snapshot).primary
@@ -508,17 +379,10 @@ extension UsageStore {
         }
 
         let primaryTitle = Self.widgetPrimaryTitle(provider: provider, snapshot: snapshot, metadata: metadata)
-        let secondaryTitle = if provider == .amp {
-            AmpProviderDescriptor.secondaryLabel(snapshot: snapshot) ?? metadata?.weeklyLabel ?? "Weekly"
-        } else if provider == .alibabatokenplan {
-            AlibabaTokenPlanProviderDescriptor.secondaryLabel(window: snapshot.secondary) ??
-                metadata?.weeklyLabel ?? "Weekly"
-        } else {
-            metadata.map {
-                ProviderDescriptorRegistry.descriptor(for: provider).presentation
-                    .rateWindowLabels(metadata: $0, snapshot: snapshot, now: now).secondary
-            } ?? "Weekly"
-        }
+        let secondaryTitle = metadata.map {
+            ProviderDescriptorRegistry.descriptor(for: provider).presentation
+                .rateWindowLabels(metadata: $0, snapshot: snapshot, now: now).secondary
+        } ?? "Weekly"
 
         var rows: [WidgetSnapshot.WidgetUsageRowSnapshot] = [
             WidgetSnapshot.WidgetUsageRowSnapshot(
@@ -538,20 +402,9 @@ extension UsageStore {
         }
         var extraWindows: [NamedRateWindow] = []
         var includesWindow = true
-        // Provider-specific by design: keep each provider's existing selection and wire shape.
-        if provider == .cursor {
-            extraWindows = (snapshot.extraRateWindows ?? []).filter { $0.id == CursorSandUsageStatus.extraWindowID }
-        }
         if provider == .claude, self.settings.claudeModelScopedWeeklyUsageVisible {
             extraWindows = (snapshot.extraRateWindows ?? []).filter {
                 $0.id.hasPrefix(Self.claudeModelScopedWeeklyWindowIDPrefix)
-            }
-        }
-        if provider == .kimi {
-            // Kimi persists its subscription lanes in this order, without the optional raw window.
-            includesWindow = false
-            extraWindows = ["kimi-monthly", "kimi-code-7d"].compactMap { id in
-                snapshot.extraRateWindows?.first { $0.id == id }
             }
         }
         rows.append(contentsOf: extraWindows.compactMap { namedWindow in

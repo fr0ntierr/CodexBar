@@ -98,8 +98,13 @@ source "$ROOT/Scripts/package_product_paths.sh"
 source "$ROOT/Scripts/sparkle_signing_paths.sh"
 
 # SwiftBuild can record the deployment target as the SDK, enabling legacy native UI.
-CODEXBAR_MACOS_SDK_PATH=$(xcrun --sdk macosx --show-sdk-path)
-SDK_VERSION=$(xcrun --sdk macosx --show-sdk-version)
+if [[ -n "${SDKROOT:-}" && -d "${SDKROOT}" ]]; then
+  CODEXBAR_MACOS_SDK_PATH="$SDKROOT"
+  SDK_VERSION="$(basename "$SDKROOT" | sed -E 's/MacOSX([0-9]+\.[0-9]+).*/\1/')"
+else
+  CODEXBAR_MACOS_SDK_PATH=$(xcrun --sdk macosx --show-sdk-path)
+  SDK_VERSION=$(xcrun --sdk macosx --show-sdk-version)
+fi
 BUILD_ARGS=(--sdk "$CODEXBAR_MACOS_SDK_PATH"
   -Xlinker -platform_version -Xlinker macos -Xlinker 14.0 -Xlinker "$SDK_VERSION")
 
@@ -233,7 +238,7 @@ stage_build_products() {
 
   stage_dir="$PRODUCT_STAGE_ROOT/$arch"
   mkdir -p "$stage_dir"
-  for name in CodexBar CodexBarCLI CodexBarClaudeWatchdog; do
+  for name in CodexBarLite CodexBarClaudeWatchdog; do
     if ! product=$(codexbar_require_product_file "$bin_dir" "$name" "$arch"); then
       return 1
     fi
@@ -251,8 +256,8 @@ stage_build_products() {
     fi
     cp "$product" "$stage_dir/$name"
   done
-  if [[ -d "$bin_dir/CodexBar.dSYM" ]]; then
-    cp -R "$bin_dir/CodexBar.dSYM" "$stage_dir/"
+  if [[ -d "$bin_dir/CodexBarLite.dSYM" ]]; then
+    cp -R "$bin_dir/CodexBarLite.dSYM" "$stage_dir/"
   fi
 }
 
@@ -261,8 +266,8 @@ for ARCH in "${ARCH_LIST[@]}"; do
   stage_build_products "$ARCH"
 done
 
-APP_FINAL="$ROOT/CodexBar.app"
-APP_STAGE="$ROOT/.build/package/CodexBar.app"
+APP_FINAL="$ROOT/CodexBarLite.app"
+APP_STAGE="$ROOT/.build/package/CodexBarLite.app"
 rm -rf "$APP_STAGE"
 APP="$APP_STAGE"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
@@ -275,11 +280,11 @@ if [[ -f "$ICON_SOURCE" ]]; then
   iconutil --convert icns --output "$ICON_TARGET" "$ICON_SOURCE"
 fi
 
-BUNDLE_ID="com.steipete.codexbar"
+BUNDLE_ID="com.steipete.codexbarlite"
 FEED_URL="https://raw.githubusercontent.com/steipete/CodexBar/main/appcast.xml"
 AUTO_CHECKS=true
 if [[ "$LOWER_CONF" == "debug" ]]; then
-  BUNDLE_ID="com.steipete.codexbar.debug"
+  BUNDLE_ID="com.steipete.codexbarlite.debug"
   FEED_URL=""
   AUTO_CHECKS=false
 fi
@@ -304,7 +309,7 @@ fi
 PROVISIONING_PROFILE_SOURCE="$ROOT/Scripts/profiles/CodexBar-DeveloperID.provisionprofile"
 EMBED_PROVISIONING_PROFILE=0
 ICLOUD_ENTITLEMENT_KEYS=""
-if [[ "$SIGNING_MODE" == "identity" && "$LOWER_CONF" == "release" && "$BUNDLE_ID" == "com.steipete.codexbar" && "$APP_TEAM_ID" == "Y5PE65HELJ" ]]; then
+if [[ "$SIGNING_MODE" == "identity" && "$LOWER_CONF" == "release" && "$BUNDLE_ID" == "com.steipete.codexbarlite" && "$APP_TEAM_ID" == "Y5PE65HELJ" ]]; then
   if [[ ! -f "$PROVISIONING_PROFILE_SOURCE" ]]; then
     echo "ERROR: Missing $PROVISIONING_PROFILE_SOURCE (required for iCloud entitlements in release builds)" >&2
     exit 1
@@ -364,10 +369,10 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key><string>CodexBar</string>
-    <key>CFBundleDisplayName</key><string>CodexBar</string>
+    <key>CFBundleName</key><string>CodexBarLite</string>
+    <key>CFBundleDisplayName</key><string>CodexBarLite</string>
     <key>CFBundleIdentifier</key><string>${BUNDLE_ID}</string>
-    <key>CFBundleExecutable</key><string>CodexBar</string>
+    <key>CFBundleExecutable</key><string>CodexBarLite</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>${MARKETING_VERSION}</string>
     <key>CFBundleVersion</key><string>${BUILD_NUMBER}</string>
@@ -389,8 +394,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>UTExportedTypeDeclarations</key>
     <array>
         <dict>
-            <key>UTTypeIdentifier</key><string>com.steipete.codexbar.menu-layout-item</string>
-            <key>UTTypeDescription</key><string>CodexBar menu bar layout token</string>
+            <key>UTTypeIdentifier</key><string>com.steipete.codexbarlite.menu-layout-item</string>
+            <key>UTTypeDescription</key><string>CodexBarLite menu bar layout token</string>
             <key>UTTypeConformsTo</key>
             <array>
                 <string>public.data</string>
@@ -562,16 +567,17 @@ install_widget_extension() {
   verify_binary_arches "$widget_app/Contents/MacOS/CodexBarWidget" "${ARCH_LIST[@]}"
 }
 
-install_binary "CodexBar" "$APP/Contents/MacOS/CodexBar"
-strip_release_binary "$APP/Contents/MacOS/CodexBar"
-# Ship CodexBarCLI alongside the app for easy symlinking.
-install_binary "CodexBarCLI" "$APP/Contents/Helpers/CodexBarCLI"
-strip_release_binary "$APP/Contents/Helpers/CodexBarCLI"
+install_binary "CodexBarLite" "$APP/Contents/MacOS/CodexBarLite"
+strip_release_binary "$APP/Contents/MacOS/CodexBarLite"
 # Watchdog helper: ensures `claude` probes die when CodexBar crashes/gets killed.
 install_binary "CodexBarClaudeWatchdog" "$APP/Contents/Helpers/CodexBarClaudeWatchdog"
 strip_release_binary "$APP/Contents/Helpers/CodexBarClaudeWatchdog"
-install_widget_extension
-strip_release_binary "$APP/Contents/PlugIns/CodexBarWidget.appex/Contents/MacOS/CodexBarWidget"
+if xcodebuild -version >/dev/null 2>&1; then
+  install_widget_extension
+  strip_release_binary "$APP/Contents/PlugIns/CodexBarWidget.appex/Contents/MacOS/CodexBarWidget"
+else
+  echo "INFO: xcodebuild is not available in Command Line Tools; skipping widget extension packaging." >&2
+fi
 
 swiftpm_bin_path "${ARCH_LIST[0]}" PREFERRED_BUILD_DIR
 
@@ -579,7 +585,7 @@ swiftpm_bin_path "${ARCH_LIST[0]}" PREFERRED_BUILD_DIR
 SPARKLE_SOURCE=$(codexbar_require_product_directory "$PREFERRED_BUILD_DIR" Sparkle.framework packaging)
 cp -R "$SPARKLE_SOURCE" "$APP/Contents/Frameworks/"
 chmod -R a+rX "$APP/Contents/Frameworks/Sparkle.framework"
-install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/CodexBar"
+install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/CodexBarLite"
 # Re-sign Sparkle and all nested components with the selected package identity.
 SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
 if [[ "$SIGNING_MODE" == "adhoc" ]]; then
@@ -621,23 +627,19 @@ if [[ ${#SWIFTPM_BUNDLES[@]} -gt 0 ]]; then
     bundle_name="$(basename "$bundle")"
     cp -R "$bundle" "$APP/Contents/Resources/"
   done
+  for codexbar_bundle in "$APP/Contents/Resources/"*CodexBar*.bundle; do
+    if [[ -d "$codexbar_bundle/Contents/Resources" ]]; then
+      cp -R "$APP_RESOURCES_DIR/"* "$codexbar_bundle/Contents/Resources/" 2>/dev/null || true
+    elif [[ -d "$codexbar_bundle" ]]; then
+      cp -R "$APP_RESOURCES_DIR/"* "$codexbar_bundle/" 2>/dev/null || true
+    fi
+  done
 fi
 if [[ ! -d "$APP/Contents/Resources/KeyboardShortcuts_KeyboardShortcuts.bundle" ]]; then
   echo "ERROR: Missing KeyboardShortcuts SwiftPM resource bundle (Settings → Keyboard shortcut will crash)." >&2
   echo "Expected: ${PREFERRED_BUILD_DIR}/KeyboardShortcuts_KeyboardShortcuts.bundle" >&2
   exit 1
 fi
-
-# The helper CLI resolves CodexBarCore resources beside its executable. Keep a
-# dedicated copy in Helpers; the app copy above remains in Contents/Resources.
-CORE_RESOURCE_BUNDLE="${PREFERRED_BUILD_DIR}/CodexBar_CodexBarCore.bundle"
-if [[ ! -d "$CORE_RESOURCE_BUNDLE" ]]; then
-  echo "ERROR: Missing CodexBarCore SwiftPM resource bundle for CodexBarCLI." >&2
-  echo "Expected: ${CORE_RESOURCE_BUNDLE}" >&2
-  exit 1
-fi
-rm -rf "$APP/Contents/Helpers/CodexBar_CodexBarCore.bundle"
-cp -R "$CORE_RESOURCE_BUNDLE" "$APP/Contents/Helpers/"
 
 # Ensure contents are writable before stripping attributes and signing.
 chmod -R u+w "$APP"
@@ -647,12 +649,6 @@ xattr -cr "$APP"
 find "$APP" -name '._*' -delete
 
 # Sign helper binaries if present
-if [[ -f "${APP}/Contents/Helpers/CodexBarCLI" ]]; then
-  codesign "${CODESIGN_ARGS[@]}" "${APP}/Contents/Helpers/CodexBarCLI"
-fi
-if [[ -d "${APP}/Contents/Helpers/CodexBar_CodexBarCore.bundle" ]]; then
-  codesign "${CODESIGN_ARGS[@]}" "${APP}/Contents/Helpers/CodexBar_CodexBarCore.bundle"
-fi
 if [[ -f "${APP}/Contents/Helpers/CodexBarClaudeWatchdog" ]]; then
   codesign "${CODESIGN_ARGS[@]}" "${APP}/Contents/Helpers/CodexBarClaudeWatchdog"
 fi

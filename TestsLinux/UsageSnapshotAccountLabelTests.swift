@@ -12,7 +12,7 @@ struct UsageSnapshotAccountLabelTests {
     func `fallback label preserves the provider identity`(email: String?, expected: String) {
         let snapshot = self.snapshot(email: email)
 
-        let labeled = snapshot.withAccountLabel(" Team Account ", for: .zai)
+        let labeled = snapshot.withAccountLabel(" Team Account ", for: .deepseek)
 
         #expect(labeled.identity?.accountEmail == expected)
         #expect(labeled.identity?.accountID == "fixture-account-id")
@@ -24,7 +24,7 @@ struct UsageSnapshotAccountLabelTests {
 
     @Test(arguments: ["", " \n "])
     func `empty labels leave the original identity untouched`(label: String) {
-        let labeled = self.snapshot(email: " fetched@example.com ").withAccountLabel(label, for: .zai)
+        let labeled = self.snapshot(email: " fetched@example.com ").withAccountLabel(label, for: .deepseek)
 
         #expect(labeled.identity?.accountEmail == " fetched@example.com ")
         #expect(labeled.identity?.accountID == "fixture-account-id")
@@ -32,9 +32,9 @@ struct UsageSnapshotAccountLabelTests {
 
     @Test
     func `fallback labels never borrow another provider identity`() {
-        let labeled = self.snapshot(email: "fetched@example.com").withAccountLabel("Other Account", for: .synthetic)
+        let labeled = self.snapshot(email: "fetched@example.com").withAccountLabel("Other Account", for: .claude)
 
-        #expect(labeled.identity?.providerID == .synthetic)
+        #expect(labeled.identity?.providerID == .claude)
         #expect(labeled.identity?.accountEmail == "Other Account")
         #expect(labeled.identity?.accountID == nil)
         #expect(labeled.identity?.accountOrganization == nil)
@@ -47,7 +47,7 @@ struct UsageSnapshotAccountLabelTests {
             secondary: nil,
             updatedAt: Date(timeIntervalSince1970: 1_700_000_000),
             identity: ProviderIdentitySnapshot(
-                providerID: .zai,
+                providerID: .deepseek,
                 accountEmail: email,
                 accountOrganization: "Fixture Organization",
                 loginMethod: "Fixture Plan",

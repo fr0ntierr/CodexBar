@@ -3,8 +3,8 @@ import CodexBarCore
 import SwiftUI
 
 enum SettingsWindowIdentity {
-    static let identifier = "com.steipete.codexbar.settings"
-    static let frameAutosaveName = "CodexBar.SettingsWindow"
+    static let identifier = "com.steipete.codexbarlite.settings"
+    static let frameAutosaveName = "CodexBarLite.SettingsWindow"
 }
 
 @MainActor
@@ -60,7 +60,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     convenience init(
         settings: SettingsStore,
         store: UsageStore,
-        cloudSyncState: CloudSyncState,
         updater: UpdaterProviding,
         selection: PreferencesSelection,
         managedCodexAccountCoordinator: ManagedCodexAccountCoordinator,
@@ -71,7 +70,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             let rootView = PreferencesView(
                 settings: settings,
                 store: store,
-                cloudSyncState: cloudSyncState,
                 updater: updater,
                 selection: selection,
                 managedCodexAccountCoordinator: managedCodexAccountCoordinator,

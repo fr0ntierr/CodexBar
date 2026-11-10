@@ -51,7 +51,7 @@ actor CostUsageStore {
                 if let executor = Self.registry[key]?.value { return executor }
                 Self.registry = Self.registry.filter { $0.value.value != nil }
                 let suffix = String(UInt(bitPattern: key.hashValue), radix: 16).suffix(8)
-                let executor = StoreSerialExecutor(label: "com.steipete.codexbar.cost-usage-store.\(suffix)")
+                let executor = StoreSerialExecutor(label: "com.steipete.codexbarlite.cost-usage-store.\(suffix)")
                 Self.registry[key] = WeakExecutor(value: executor)
                 return executor
             }
@@ -254,7 +254,7 @@ actor CostUsageStore {
 
     static func databaseURL(cacheRoot: URL?) -> URL {
         let root = cacheRoot ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("CodexBar", isDirectory: true)
+            .appendingPathComponent("CodexBarLite", isDirectory: true)
         return root.appendingPathComponent("cost-usage", isDirectory: true)
             .appendingPathComponent(Self.databaseFilename, isDirectory: false)
     }

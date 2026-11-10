@@ -150,7 +150,6 @@ public enum ClaudeProviderDescriptor {
                 ],
                 debugPane: ProviderDebugPaneCapabilities(
                     probeLogOrder: 1,
-                    notificationSimulationOrder: 1,
                     errorSimulationOrder: 1),
                 browserCookieOrder: self.browserCookieOrder,
                 dashboardURL: "https://platform.claude.com/usage",

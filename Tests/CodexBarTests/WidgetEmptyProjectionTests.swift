@@ -14,7 +14,7 @@ struct WidgetEmptyProjectionTests {
     func `one ineligible provider cannot erase another providers last good widget reading`(
         scenario: String) async throws
     {
-        let (store, settings) = self.makeStore(providers: [.minimax, .deepseek, .claude])
+        let (store, settings) = self.makeStore(providers: [.openai, .deepseek, .claude])
         var saved: WidgetSnapshot?
         store._test_widgetSnapshotSaveOverride = { saved = $0 }
         self.seed(store, measuredAt: Date().addingTimeInterval(-3600))
@@ -25,18 +25,18 @@ struct WidgetEmptyProjectionTests {
         #expect(before.balanceText == "$25.00")
         store.snapshots.removeAll()
         store.errors = [
-            .minimax: "Synthetic offline failure",
+            .openai: "Synthetic offline failure",
             .deepseek: "Synthetic offline failure",
             .claude: "Synthetic offline failure",
         ]
         switch scenario {
         case "claude": store.widgetUsagePreservationBlockedProviders.insert(.claude)
         case "disabled":
-            settings.setProviderEnabled(provider: .minimax, metadata: store.metadata(for: .minimax), enabled: false)
+            settings.setProviderEnabled(provider: .openai, metadata: store.metadata(for: .openai), enabled: false)
         case "retired":
-            store.clearProviderRuntimeState(.minimax)
-            store.errors[.minimax] = "Synthetic offline failure"
-        case "partial": self.seed(store, providers: [.minimax])
+            store.clearProviderRuntimeState(.openai)
+            store.errors[.openai] = "Synthetic offline failure"
+        case "partial": self.seed(store, providers: [.openai])
         default: break
         }
         store.persistWidgetSnapshot(reason: "synthetic-after-wake")
@@ -48,7 +48,7 @@ struct WidgetEmptyProjectionTests {
         #expect(after.balanceText == before.balanceText)
         #expect(saved?.entries.contains { $0.provider == .claude } == false)
         if scenario == "disabled" || scenario == "retired" {
-            #expect(saved?.entries.contains { $0.provider == .minimax } == false)
+            #expect(saved?.entries.contains { $0.provider == .openai } == false)
         }
     }
 
@@ -59,7 +59,7 @@ struct WidgetEmptyProjectionTests {
         let entry = CodexBarSwitcherEntry(
             date: snapshot.generatedAt,
             provider: .deepseek,
-            availableProviders: [.minimax, .deepseek, .claude],
+            availableProviders: [.openai, .deepseek, .claude],
             snapshot: snapshot)
         let view = CodexBarSwitcherWidgetView(entry: entry)
             .environment(\.widgetRenderingMode, .fullColor)
@@ -86,7 +86,7 @@ struct WidgetEmptyProjectionTests {
         store.persistWidgetSnapshot(reason: "synthetic-success")
         if !queued { await store.widgetSnapshotPersistTask?.value }
         store.snapshots.removeAll()
-        store.errors = [.minimax: "Synthetic offline failure", .deepseek: "Synthetic offline failure"]
+        store.errors = [.openai: "Synthetic offline failure", .deepseek: "Synthetic offline failure"]
         settings.usageBarsShowUsed = true
         store.persistWidgetSnapshot(reason: "synthetic-all-failed")
         await store.widgetSnapshotPersistTask?.value
@@ -112,14 +112,14 @@ struct WidgetEmptyProjectionTests {
         store.persistWidgetSnapshot(reason: "synthetic-success")
         await store.widgetSnapshotPersistTask?.value
         store.snapshots.removeAll()
-        store.errors = [.minimax: "Synthetic offline failure", .deepseek: "Synthetic offline failure"]
+        store.errors = [.openai: "Synthetic offline failure", .deepseek: "Synthetic offline failure"]
         switch scenario {
         case "disabled":
-            settings.setProviderEnabled(provider: .minimax, metadata: store.metadata(for: .minimax), enabled: false)
-        case "blocked": store.widgetUsagePreservationBlockedProviders.insert(.minimax)
+            settings.setProviderEnabled(provider: .openai, metadata: store.metadata(for: .openai), enabled: false)
+        case "blocked": store.widgetUsagePreservationBlockedProviders.insert(.openai)
         case "retired":
-            store.clearProviderRuntimeState(.minimax)
-            store.errors[.minimax] = "Synthetic offline failure"
+            store.clearProviderRuntimeState(.openai)
+            store.errors[.openai] = "Synthetic offline failure"
         case "no-failure": store.errors.removeAll()
         case "partial": self.seed(store, providers: [.deepseek])
         case "cold-start":
@@ -136,7 +136,7 @@ struct WidgetEmptyProjectionTests {
         if scenario == "cold-start" { saved = WidgetSnapshotStore.load(from: url) }
         let expected: Set<ProviderInstanceID> = switch scenario {
         case "disabled", "blocked", "retired": [.deepseek]
-        case "partial": [.minimax, .deepseek]
+        case "partial": [.openai, .deepseek]
         default: []
         }
         #expect(Set(saved?.entries.map(\.provider) ?? []) == expected)
@@ -155,7 +155,7 @@ struct WidgetEmptyProjectionTests {
         store._test_providerFetchOutcomeOverride = { _ in
             ProviderFetchOutcome(result: .failure(URLError(.userAuthenticationRequired)), attempts: [])
         }
-        for provider in [UsageProvider.minimax, .deepseek] {
+        for provider in [UsageProvider.openai, .deepseek] {
             await store.refreshProvider(provider, allowDisabled: true)
             await store.refreshProvider(provider, allowDisabled: true)
         }
@@ -253,22 +253,22 @@ struct WidgetEmptyProjectionTests {
     func `successful refresh must publish before invalidated widget usage can be retained`(
         publishWhileBlocked: Bool) async
     {
-        let (store, _) = self.makeStore(providers: [.minimax])
+        let (store, _) = self.makeStore(providers: [.openai])
         var saved: WidgetSnapshot?
         store._test_widgetSnapshotSaveOverride = { saved = $0 }
-        self.seed(store, providers: [.minimax])
+        self.seed(store, providers: [.openai])
         store.persistWidgetSnapshot(reason: "synthetic-old-account")
         await store.widgetSnapshotPersistTask?.value
         if publishWhileBlocked {
             store._test_providerFetchOutcomeOverride = { _ in
                 ProviderFetchOutcome(result: .failure(URLError(.userAuthenticationRequired)), attempts: [])
             }
-            await store.refreshProvider(.minimax)
+            await store.refreshProvider(.openai)
             store.persistWidgetSnapshot(reason: "synthetic-gated-terminal-error")
             await store.widgetSnapshotPersistTask?.value
             #expect(saved?.entries.first?.primary?.usedPercent == 25)
         } else {
-            store.clearProviderRuntimeState(.minimax)
+            store.clearProviderRuntimeState(.openai)
         }
         let replacement = UsageSnapshot(
             primary: RateWindow(usedPercent: 75, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
@@ -283,15 +283,15 @@ struct WidgetEmptyProjectionTests {
                 strategyID: "fixture",
                 strategyKind: .apiToken)), attempts: [])
         }
-        await store.refreshProvider(.minimax)
-        #expect(store.snapshot(for: .minimax)?.primary?.usedPercent == 75)
+        await store.refreshProvider(.openai)
+        #expect(store.snapshot(for: .openai)?.primary?.usedPercent == 75)
         store.snapshots.removeAll()
-        store.errors[.minimax] = "Synthetic offline failure"
+        store.errors[.openai] = "Synthetic offline failure"
         store.persistWidgetSnapshot(reason: "synthetic-offline-before-replacement-publication")
         await store.widgetSnapshotPersistTask?.value
         #expect(saved?.entries.isEmpty == true)
 
-        store._setSnapshotForTesting(replacement, provider: .minimax)
+        store._setSnapshotForTesting(replacement, provider: .openai)
         store.persistWidgetSnapshot(reason: "synthetic-replacement-publication")
         await store.widgetSnapshotPersistTask?.value
         store.snapshots.removeAll()
@@ -355,64 +355,64 @@ struct WidgetEmptyProjectionTests {
     }
 
     @Test(arguments: [
-        ([MenuBarMetricPreference.automatic, .monthlyPlan], ["mistral-monthly-plan"]),
+        ([MenuBarMetricPreference.automatic, .monthlyPlan], ["gemini-monthly-plan"]),
         ([MenuBarMetricPreference.automatic, .monthlyPlan, .automatic], ["primary"]),
-        ([MenuBarMetricPreference.primary, .monthlyPlan], ["mistral-monthly-plan"]),
-        ([MenuBarMetricPreference.monthlyPlan, .primary, .monthlyPlan], ["mistral-monthly-plan"]),
+        ([MenuBarMetricPreference.primary, .monthlyPlan], ["gemini-monthly-plan"]),
+        ([MenuBarMetricPreference.monthlyPlan, .primary, .monthlyPlan], ["gemini-monthly-plan"]),
     ])
     func `offline metric changes rebuild preserved Mistral rows only`(
         metrics: [MenuBarMetricPreference],
-        expectedMistralRowIDs: [String]) async throws
+        expectedGeminiRowIDs: [String]) async throws
     {
-        let (store, settings) = self.makeStore(providers: [.minimax, .mistral])
+        let (store, settings) = self.makeStore(providers: [.openai, .gemini])
         var saved: WidgetSnapshot?
         store._test_widgetSnapshotSaveOverride = { saved = $0 }
-        settings.setMenuBarMetricPreference(metrics[0], for: .mistral)
-        self.seed(store, providers: [.minimax])
+        settings.setMenuBarMetricPreference(metrics[0], for: .gemini)
+        self.seed(store, providers: [.openai])
         store._setSnapshotForTesting(
             UsageSnapshot(
                 primary: RateWindow(usedPercent: 25, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
                 secondary: nil,
                 extraRateWindows: [NamedRateWindow(
-                    id: "mistral-monthly-plan",
+                    id: "gemini-monthly-plan",
                     title: "Monthly Plan",
                     window: RateWindow(usedPercent: 40, windowMinutes: nil, resetsAt: nil, resetDescription: nil))],
                 updatedAt: Date(timeIntervalSince1970: 1_800_000_000)),
-            provider: .mistral)
+            provider: .gemini)
         store.persistWidgetSnapshot(reason: "synthetic-success")
         await store.widgetSnapshotPersistTask?.value
-        let minimaxRows = try #require(saved?.entries.first { $0.provider == .minimax }?.usageRows)
-        let mistralBefore = try #require(saved?.entries.first { $0.provider == .mistral })
+        let openaiRows = try #require(saved?.entries.first { $0.provider == .openai }?.usageRows)
+        let geminiBefore = try #require(saved?.entries.first { $0.provider == .gemini })
 
         store.snapshots.removeAll()
-        store.errors = [.minimax: "Synthetic offline failure", .mistral: "Synthetic offline failure"]
+        store.errors = [.openai: "Synthetic offline failure", .gemini: "Synthetic offline failure"]
         for metric in metrics.dropFirst() {
-            settings.setMenuBarMetricPreference(metric, for: .mistral)
+            settings.setMenuBarMetricPreference(metric, for: .gemini)
             store.persistWidgetSnapshot(reason: "synthetic-metric-change")
             await store.widgetSnapshotPersistTask?.value
         }
 
         let published = try #require(saved)
-        #expect(published.entries.first { $0.provider == .minimax }?.usageRows == minimaxRows)
-        #expect(published.entries.first { $0.provider == .mistral }?.usageRows?.map(\.id) == expectedMistralRowIDs)
-        #expect(published.entries.first { $0.provider == .mistral }?.updatedAt == mistralBefore.updatedAt)
-        #expect(published.entries.first { $0.provider == .mistral }?.primary == mistralBefore.primary)
+        #expect(published.entries.first { $0.provider == .openai }?.usageRows == openaiRows)
+        #expect(published.entries.first { $0.provider == .gemini }?.usageRows?.map(\.id) == expectedGeminiRowIDs)
+        #expect(published.entries.first { $0.provider == .gemini }?.updatedAt == geminiBefore.updatedAt)
+        #expect(published.entries.first { $0.provider == .gemini }?.primary == geminiBefore.primary)
     }
 
     @Test
     func `metric changes retain widgets whose rows are independent of the menu metric`() async throws {
-        let (store, settings) = self.makeStore(providers: [.kimi])
+        let (store, settings) = self.makeStore(providers: [.codex])
         var saved: WidgetSnapshot?
         store._test_widgetSnapshotSaveOverride = { saved = $0 }
-        self.seed(store, providers: [.kimi])
+        self.seed(store, providers: [.codex])
         store.persistWidgetSnapshot(reason: "synthetic-success")
         await store.widgetSnapshotPersistTask?.value
         let before = try #require(saved?.entries.first)
 
         store.snapshots.removeAll()
-        store.errors = [.kimi: "Synthetic offline failure"]
+        store.errors = [.codex: "Synthetic offline failure"]
         let previousMetrics = settings.menuBarMetricPreferencesRaw
-        settings.setMenuBarMetricPreference(.monthlyPlan, for: .kimi)
+        settings.setMenuBarMetricPreference(.monthlyPlan, for: .codex)
         #expect(settings.menuBarMetricPreferencesRaw != previousMetrics)
         store.persistWidgetSnapshot(reason: "synthetic-unrelated-metric-change")
         await store.widgetSnapshotPersistTask?.value
@@ -424,18 +424,18 @@ struct WidgetEmptyProjectionTests {
 
     @Test
     func `retained sources are opt in and cleared with provider ownership`() async {
-        let (store, _) = self.makeStore(providers: [.minimax, .mistral])
+        let (store, _) = self.makeStore(providers: [.openai, .gemini])
         store._test_widgetSnapshotSaveOverride = { _ in }
-        self.seed(store, providers: [.minimax, .mistral])
+        self.seed(store, providers: [.openai, .gemini])
         store.persistWidgetSnapshot(reason: "synthetic-source-ownership")
         await store.widgetSnapshotPersistTask?.value
-        #expect(Set(store.lastWidgetSourceSnapshots.keys) == Set([UsageProvider.mistral.instanceID]))
-        store.invalidateGenericWidgetUsage(for: .mistral)
+        #expect(Set(store.lastWidgetSourceSnapshots.keys) == Set([UsageProvider.gemini.instanceID]))
+        store.invalidateGenericWidgetUsage(for: .gemini)
         #expect(store.lastWidgetSourceSnapshots.isEmpty)
     }
 
     private func makeStore(
-        providers: Set<UsageProvider> = [.minimax, .deepseek]) -> (UsageStore, SettingsStore)
+        providers: Set<UsageProvider> = [.openai, .deepseek]) -> (UsageStore, SettingsStore)
     {
         let root = ProviderTransportRegressionFixtures.root.appendingPathComponent(UUID().uuidString)
         let environment = ["HOME": root.path, "CODEX_HOME": root.appendingPathComponent("codex").path]
@@ -463,7 +463,7 @@ struct WidgetEmptyProjectionTests {
 
     private func seed(
         _ store: UsageStore,
-        providers: [UsageProvider] = [.minimax, .deepseek],
+        providers: [UsageProvider] = [.openai, .deepseek],
         measuredAt: Date = Date(timeIntervalSince1970: 1_800_000_000))
     {
         for (index, provider) in providers.enumerated() {

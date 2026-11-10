@@ -1398,7 +1398,7 @@ extension GeminiStatusProbe {
 
 extension GeminiStatusProbe {
     private static let processTimeoutQueue = DispatchQueue(
-        label: "com.steipete.codexbar.gemini-process-timeout",
+        label: "com.steipete.codexbarlite.gemini-process-timeout",
         qos: .utility,
         attributes: .concurrent)
 

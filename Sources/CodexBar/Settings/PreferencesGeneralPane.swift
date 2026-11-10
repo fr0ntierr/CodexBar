@@ -172,6 +172,22 @@ struct GeneralPane: View {
                 }
             }
 
+            Section {
+                SettingsMenuPicker(
+                    selection: self.$settings.confettiCelebrationOption,
+                    options: GeneralSettingsMenuOptions.confettiCelebrations,
+                    label: {
+                        SettingsRowLabel(
+                            L("confetti_on_reset_title"),
+                            subtitle: L("confetti_on_reset_subtitle"))
+                    },
+                    optionLabel: { option in
+                        Text(option.label)
+                    })
+            } header: {
+                Text(L("section_celebrations"))
+            }
+
             PreferencesTransferSection(settings: self.settings)
 
             Section {

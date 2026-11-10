@@ -4,7 +4,7 @@ import SwiftUI
 
 enum CodexWorkspacesWindowIdentity {
     static let menuItem = "codexWorkspaces"
-    static let window = "com.steipete.codexbar.workspaces"
+    static let window = "com.steipete.codexbarlite.workspaces"
 }
 
 @MainActor

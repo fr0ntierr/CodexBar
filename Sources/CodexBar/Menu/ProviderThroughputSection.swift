@@ -48,8 +48,15 @@ struct ProviderCardAction {
     var perform: (@MainActor @Sendable (MenuDescriptor.MenuAction) -> Void)?
 }
 
+private struct ProviderCardActionKey: EnvironmentKey {
+    static let defaultValue = ProviderCardAction()
+}
+
 extension EnvironmentValues {
-    @Entry var providerCardAction = ProviderCardAction()
+    var providerCardAction: ProviderCardAction {
+        get { self[ProviderCardActionKey.self] }
+        set { self[ProviderCardActionKey.self] = newValue }
+    }
 }
 
 struct ProviderThroughputContent: View {

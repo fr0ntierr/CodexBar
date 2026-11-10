@@ -44,13 +44,6 @@ extension StatusItemController {
         selection: ProviderSwitcherSelection? = nil,
         codexWorkspacesMenuEnabled: Bool = CodexWorkspacesMenuAvailability.isEnabledForCurrentProcess) -> MenuDescriptor
     {
-        let pluginDashboardAvailable: Bool = if case let .provider(instanceID)? = selection,
-                                                instanceID.firstPartyProvider == nil
-        {
-            self.userPluginDashboardURL(for: instanceID) != nil
-        } else {
-            false
-        }
         return MenuDescriptor.build(
             provider: provider,
             store: self.store,
@@ -63,7 +56,6 @@ extension StatusItemController {
             isInstallingUpdate: self.updater.updateStatus.isInstalling,
             canCheckForUpdates: self.updater.isAvailable,
             includeContextualActions: includeContextualActions,
-            pluginDashboardAvailable: pluginDashboardAvailable,
             codexWorkspacesMenuEnabled: codexWorkspacesMenuEnabled,
             isKeepingAwake: self.agentSessions.isKeepingAwake,
             agentSessionsEnabled: self.settings.agentSessionsEnabled,
@@ -150,8 +142,6 @@ extension StatusItemController {
             "checkForUpdates"
         case .refresh:
             "refresh"
-        case .refreshAugmentSession:
-            "refreshAugmentSession"
         case .dashboard:
             "dashboard"
         case .statusPage:

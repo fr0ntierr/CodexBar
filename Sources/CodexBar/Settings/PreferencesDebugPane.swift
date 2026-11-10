@@ -7,8 +7,6 @@ struct DebugPane: View {
     @Bindable var settings: SettingsStore
     @Bindable var store: UsageStore
     @AppStorage("debugFileLoggingEnabled") private var debugFileLoggingEnabled = false
-    @AppStorage(ProviderPluginRuntime.javaScriptCoreRollbackDefaultsKey)
-    private var useJavaScriptCorePluginEngine = false
     // Provider-specific by design: debug probe, fetch, and error pickers historically start on Codex.
     @State private var currentLogProvider: UsageProvider = .codex
     @State private var currentFetchProvider: UsageProvider = .codex
@@ -73,13 +71,6 @@ struct DebugPane: View {
                         title: L("force_animation_next_refresh"),
                         subtitle: L("force_animation_next_refresh_subtitle"),
                         binding: self.$store.debugForceAnimation)
-                }
-
-                SettingsSection(title: L("Provider Plugins")) {
-                    PreferenceToggleRow(
-                        title: L("use_javascriptcore_plugin_engine"),
-                        subtitle: L("use_javascriptcore_plugin_engine_subtitle"),
-                        binding: self.$useJavaScriptCorePluginEngine)
                 }
 
                 SettingsSection(
@@ -267,36 +258,6 @@ struct DebugPane: View {
                 }
 
                 SettingsSection(
-                    title: L("section_notifications"),
-                    caption: L("notifications_caption"))
-                {
-                    Picker(L("Provider"), selection: self.$currentLogProvider) {
-                        ForEach(Self.notificationSimulationProviders, id: \.self) { provider in
-                            Text(ProviderDescriptorRegistry.descriptor(for: provider).metadata.displayName)
-                                .tag(provider)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 240)
-
-                    HStack(spacing: 12) {
-                        Button {
-                            self.postSessionNotification(.depleted, provider: self.currentLogProvider)
-                        } label: {
-                            Label(L("post_depleted"), systemImage: "bell.badge")
-                        }
-                        .controlSize(.small)
-
-                        Button {
-                            self.postSessionNotification(.restored, provider: self.currentLogProvider)
-                        } label: {
-                            Label(L("post_restored"), systemImage: "bell")
-                        }
-                        .controlSize(.small)
-                    }
-                }
-
-                SettingsSection(
                     title: L("section_cli_sessions"),
                     caption: L("cli_sessions_caption"))
                 {
@@ -430,7 +391,6 @@ struct DebugPane: View {
     }
 
     private static let probeLogProviders = Self.providers { $0.probeLogOrder }
-    private static let notificationSimulationProviders = Self.providers { $0.notificationSimulationOrder }
     #if DEBUG
     private static let errorSimulationProviders = Self.providers { $0.errorSimulationOrder }
     #endif
@@ -529,10 +489,6 @@ struct DebugPane: View {
                 self.isLoadingLog = false
             }
         }
-    }
-
-    private func postSessionNotification(_ transition: SessionQuotaTransition, provider: UsageProvider) {
-        SessionQuotaNotifier().post(transition: transition, provider: provider, badge: 1)
     }
 
     private func clearCostCache() async {

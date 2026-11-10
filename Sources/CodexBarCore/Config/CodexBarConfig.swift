@@ -6,7 +6,6 @@ public struct CodexBarConfig: Codable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case version
         case providers
-        case hooks
         case shareUsageWithCLI
     }
 
@@ -23,8 +22,6 @@ public struct CodexBarConfig: Codable, Sendable {
 
     public var version: Int
     public var providers: [ProviderConfig]
-    /// Optional external event hooks. Absent (nil) or disabled means no hooks run.
-    public var hooks: HooksConfig?
     /// Opt-in: the app writes a private usage cache that `codexbar usage` falls back to in SSH sessions whose
     /// locked login keychain breaks a provider's own fetch. Off by default; written to the file only when on.
     public var shareUsageWithCLI: Bool
@@ -32,12 +29,10 @@ public struct CodexBarConfig: Codable, Sendable {
     public init(
         version: Int = Self.currentVersion,
         providers: [ProviderConfig],
-        hooks: HooksConfig? = nil,
         shareUsageWithCLI: Bool = false)
     {
         self.version = version
         self.providers = providers
-        self.hooks = hooks
         self.shareUsageWithCLI = shareUsageWithCLI
     }
 
@@ -64,24 +59,16 @@ public struct CodexBarConfig: Codable, Sendable {
                 let value = try ProviderConfigExtensionValue(from: providerDecoder)
                 data = try JSONEncoder().encode(value.requiringExactNumbers())
             }
-            if let instanceID, UserProviderPluginRegistry.plugin(for: instanceID) != nil,
-               let config = Self.exactProviderConfig(from: data)
-            {
-                providers.append(config)
-            } else {
-                self.unknownProviders.append((
-                    index, rawID, (try? providerContainer.decode(Bool.self, forKey: .enabled)) ?? false, data))
-            }
+            self.unknownProviders.append((
+                index, rawID, (try? providerContainer.decode(Bool.self, forKey: .enabled)) ?? false, data))
         }
         self.providers = providers
-        self.hooks = try container.decodeIfPresent(HooksConfig.self, forKey: .hooks)
         self.shareUsageWithCLI = try container.decodeIfPresent(Bool.self, forKey: .shareUsageWithCLI) ?? false
     }
 
     public func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(self.version, forKey: .version)
-        try container.encodeIfPresent(self.hooks, forKey: .hooks)
         if self.shareUsageWithCLI { try container.encode(true, forKey: .shareUsageWithCLI) }
         var entries = container.nestedUnkeyedContainer(forKey: .providers)
         var providers = self.providers.makeIterator()
@@ -134,8 +121,7 @@ public struct CodexBarConfig: Codable, Sendable {
         let providers = UsageProvider.allCases.map { provider in
             Self.defaultProviderConfig(
                 provider,
-                metadata: metadata,
-                alibabaTokenPlanRegion: .international)
+                metadata: metadata)
         }
         return CodexBarConfig(version: Self.currentVersion, providers: providers)
     }
@@ -183,8 +169,7 @@ public struct CodexBarConfig: Codable, Sendable {
         for provider in UsageProvider.allCases where !seen.contains(provider.instanceID) {
             normalized.append(Self.defaultProviderConfig(
                 provider,
-                metadata: metadata,
-                alibabaTokenPlanRegion: .chinaMainland))
+                metadata: metadata))
         }
 
         var copy = self
@@ -227,9 +212,7 @@ public struct CodexBarConfig: Codable, Sendable {
 
     public func providerConfig(for id: ProviderInstanceID) -> ProviderConfig? {
         if let config = self.providers.first(where: { $0.id == id }) { return config }
-        // Discovery can recover while the app still holds a config loaded before the plugin was available.
-        guard UserProviderPluginRegistry.plugin(for: id) != nil,
-              let unknown = self.unknownProviders.first(where: { $0.id == id.rawValue })
+        guard let unknown = self.unknownProviders.first(where: { $0.id == id.rawValue })
         else { return nil }
         return try? JSONDecoder().decode(ProviderConfig.self, from: unknown.data)
     }
@@ -276,13 +259,11 @@ public struct CodexBarConfig: Codable, Sendable {
 
     private static func defaultProviderConfig(
         _ provider: UsageProvider,
-        metadata: [UsageProvider: ProviderMetadata],
-        alibabaTokenPlanRegion: AlibabaTokenPlanAPIRegion) -> ProviderConfig
+        metadata: [UsageProvider: ProviderMetadata]) -> ProviderConfig
     {
         ProviderConfig(
             id: provider.instanceID,
-            enabled: metadata[provider]?.defaultEnabled,
-            region: provider == .alibabatokenplan ? alibabaTokenPlanRegion.rawValue : nil)
+            enabled: metadata[provider]?.defaultEnabled)
     }
 }
 

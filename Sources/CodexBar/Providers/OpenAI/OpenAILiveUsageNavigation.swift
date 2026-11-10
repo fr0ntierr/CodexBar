@@ -4,7 +4,7 @@ import SwiftUI
 
 enum OpenAILiveUsageWindowIdentity {
     static let menuItem = "openAILiveUsage"
-    static let window = "com.steipete.codexbar.openai-live-usage"
+    static let window = "com.steipete.codexbarlite.openai-live-usage"
 }
 
 @MainActor

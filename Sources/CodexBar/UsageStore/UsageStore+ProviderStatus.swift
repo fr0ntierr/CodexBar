@@ -34,7 +34,6 @@ extension UsageStore {
             if let components {
                 self.statusComponents[provider.instanceID] = components
             }
-            self.emitProviderStatusHooks(provider: provider, indicator: status.indicator)
         } catch {
             guard self.statusRefreshPublicationIsCurrent(
                 publicationRevision, requestGeneration: requestGeneration, for: provider) else { return }

@@ -278,6 +278,14 @@ extension StatusItemController {
             last30DaysUSD: last30DaysAmount.flatMap(toUSD))
     }
 
+    func menuBarLayoutRenderData(for provider: UsageProvider, now: Date = .init()) -> MenuBarLayoutRenderData {
+        self.menuBarLayoutRenderData(
+            provider: provider,
+            snapshot: self.menuBarUsageSource(for: provider).snapshot,
+            warningFlash: false,
+            now: now)
+    }
+
     /// Select dates from the same semantic windows as reset display tokens. Keep styles separate:
     /// an absolute weekly clock must not cause minute-by-minute countdown wakeups.
     func menuBarLayoutResetDates(
@@ -285,21 +293,13 @@ extension StatusItemController {
         now: Date,
         absolute: Bool? = nil) -> [Date]
     {
-        self.menuBarLayoutResetDates(forInstanceID: provider.instanceID, now: now, absolute: absolute)
-    }
-
-    func menuBarLayoutResetDates(
-        forInstanceID instanceID: ProviderInstanceID,
-        now: Date,
-        absolute: Bool? = nil) -> [Date]
-    {
-        let data = self.menuBarLayoutRenderData(for: instanceID, now: now)
+        let data = self.menuBarLayoutRenderData(for: provider, now: now)
         let conditionals = Dictionary(
             self.settings.menuBarLayoutConditionals.map { ($0.id, $0) },
             uniquingKeysWith: { first, _ in first })
         let outcomes = conditionals.mapValues { $0.evaluatesTrue(data: data, now: now) }
         // Hidden resets need no ticking clock; conditional predicates schedule their own state changes.
-        let tokens = self.renderedMenuBarLayoutResolution(forInstanceID: instanceID).layout.lines.joined()
+        let tokens = self.renderedMenuBarLayoutResolution(for: provider).layout.lines.joined()
             .compactMap {
                 MenuBarLayoutRenderer.resolvedDisplayToken(
                     $0, data: data, conditionals: conditionals, outcomes: outcomes)
@@ -509,12 +509,8 @@ extension UsageStore {
         let semanticWindows = MenuBarLayoutSemanticWindowResolver.windows(
             provider: provider,
             snapshot: snapshot)
-        // Provider-specific by design: Mistral's automatic lane can explicitly select its Monthly Plan window.
-        let automaticPreference = provider == .mistral
-            ? self.settings.menuBarMetricPreference(for: provider, snapshot: snapshot)
-            : .automatic
         let automatic = MenuBarMetricWindowResolver.rateWindow(
-            preference: automaticPreference,
+            preference: .automatic,
             provider: provider,
             snapshot: snapshot,
             supportsAverage: self.settings.menuBarMetricSupportsAverage(for: provider),

@@ -196,7 +196,7 @@ struct CodexBarAccountsWidget: Widget {
         { entry in
             CodexBarAccountsWidgetView(entry: entry)
         }
-        .configurationDisplayName(Text(W("%@ %@", "CodexBar", W("Accounts"))))
+        .configurationDisplayName(Text(W("%@ %@", "CodexBarLite", W("Accounts"))))
         .description(Text(W("Account Usage")))
         .supportedFamilies([.systemMedium, .systemLarge])
     }

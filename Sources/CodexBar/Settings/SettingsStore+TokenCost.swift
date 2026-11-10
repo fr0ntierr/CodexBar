@@ -85,21 +85,6 @@ extension SettingsStore {
             return true
         }
 
-        var piEnvironment = env
-        if piEnvironment["HOME"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
-            piEnvironment["HOME"] = home.path
-        }
-        let piBaseDirectory = workingDirectory ?? URL(
-            fileURLWithPath: fileManager.currentDirectoryPath,
-            isDirectory: true)
-        let piRoots = PiFamilySessionRootResolver.costSessionRootURLs(
-            environment: piEnvironment,
-            baseDirectory: piBaseDirectory,
-            processContexts: processContexts)
-        if piRoots.contains(where: hasAnyJsonl(in:)) {
-            return true
-        }
-
         let claudeRoots = ClaudeConfigPaths.costProjectsRoots(
             environment: env,
             homeDirectory: home,

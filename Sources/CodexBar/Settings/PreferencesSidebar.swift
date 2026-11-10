@@ -66,14 +66,10 @@ struct SettingsSidebarView: View {
 
     private static let appPanes: [SettingsSidebarAppPane] = [
         SettingsSidebarAppPane(pane: .general, systemImage: "gearshape.fill", color: .gray),
-        SettingsSidebarAppPane(pane: .iCloudSync, systemImage: "icloud.fill", color: .blue),
         SettingsSidebarAppPane(pane: .usageSpend, systemImage: "chart.bar.fill", color: .green),
-        SettingsSidebarAppPane(pane: .notifications, systemImage: "bell.badge.fill", color: .red),
         SettingsSidebarAppPane(pane: .menuBar, systemImage: "menubar.rectangle", color: .blue),
         SettingsSidebarAppPane(pane: .menu, systemImage: "filemenu.and.selection", color: .teal),
         SettingsSidebarAppPane(pane: .advanced, systemImage: "slider.horizontal.3", color: .purple),
-        SettingsSidebarAppPane(pane: .hooks, systemImage: "bolt.horizontal.circle.fill", color: .orange),
-        SettingsSidebarAppPane(pane: .plugins, systemImage: "puzzlepiece.extension.fill", color: .indigo),
         SettingsSidebarAppPane(pane: .about, systemImage: "info.circle.fill", color: .green),
         SettingsSidebarAppPane(pane: .debug, systemImage: "ladybug.fill", color: .red),
     ]

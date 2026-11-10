@@ -5,7 +5,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 extension UTType {
-    static let codexBarMenuLayoutItem = UTType(exportedAs: "com.steipete.codexbar.menu-layout-item")
+    static let codexBarMenuLayoutItem = UTType(exportedAs: "com.steipete.codexbarlite.menu-layout-item")
 }
 
 struct MenuBarLayoutPosition: Codable, Hashable, Sendable {
@@ -1049,8 +1049,7 @@ struct MenuBarLayoutPreview: View {
             weeklyPace: samplePace(weekly),
             automaticPace: samplePace(session),
             runsOut: L("Runs out in %@", "1d 16h"),
-            // Provider-specific by design: only OpenRouter previews the Balance palette token.
-            balance: provider == .openrouter ? "$12.34" : nil,
+            balance: nil,
             tokensPerMinute: 49_000_000,
             tokensSparkline: .init(
                 values: [30, 65, 40, 50, 35, 80, 45, 60, 151, 55, 70, 45, 60, 49].map { $0 * 1_000_000 },
@@ -1063,9 +1062,8 @@ struct MenuBarLayoutPreview: View {
                 automaticPaceDelta: samplePaceDelta(session),
                 // 1d 16h == 40h, matching the sample `runsOut` text above.
                 runsOutMinutes: 2400,
-                // Provider-specific by design: Balance predicates mirror the OpenRouter preview amounts.
-                balanceRemainingUSD: provider == .openrouter ? 12.34 : nil,
-                balanceUsedUSD: provider == .openrouter ? 7.66 : nil,
+                balanceRemainingUSD: nil,
+                balanceUsedUSD: nil,
                 costTodayUSD: 1.25,
                 cost30dUSD: 20,
                 spendPaceDelta: samplePaceDelta(spend),

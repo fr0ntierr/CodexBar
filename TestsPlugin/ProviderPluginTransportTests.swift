@@ -119,7 +119,7 @@ struct ProviderPluginTransportTests {
         let worker = try ProviderPluginEngineFactory.make(
             kind: engine,
             source: """
-            defineProvider({ id: 'neuralwatt', name: 'Fixture', endpoints: ['https://example.com'], settings: [],
+            defineProvider({ id: 'claude', name: 'Fixture', endpoints: ['https://example.com'], settings: [],
               async fetchUsage(ctx) { await ctx.http.get('https://example.com'); }
             });
             """,
@@ -370,7 +370,7 @@ struct ProviderPluginTransportTests {
     {
         try ProviderPluginRuntime(
             source: """
-            defineProvider({ id: 'neuralwatt', name: 'Fixture', endpoints: ['https://example.com'], settings: [],
+            defineProvider({ id: 'claude', name: 'Fixture', endpoints: ['https://example.com'], settings: [],
               async fetchUsage(ctx) { \(body) }
             });
             """,

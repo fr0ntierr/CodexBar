@@ -276,8 +276,6 @@ struct ProviderDetailView<SupplementaryContent: View>: View {
 
             ProviderAccentColorSettingsView(provider: self.provider, settings: self.store.settings)
 
-            ProviderQuotaWarningSettingsView(provider: self.provider, settings: self.store.settings)
-
             if !self.settingsToggles.isEmpty {
                 Section {
                     ForEach(self.settingsToggles) { toggle in
@@ -435,14 +433,6 @@ struct ProviderDetailInfoRows: View {
 
         if self.showsAccountInfo, !self.model.email.isEmpty {
             ProviderDetailInfoRow(label: L("Account"), value: self.model.email)
-        }
-
-        // Provider-specific by design: Kiro reports an auth method as a separate identity field, not a plan.
-        if self.provider == .kiro,
-           let authMethod = self.store.snapshot(for: self.provider.instanceID)?.loginMethod(for: .kiro),
-           !authMethod.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        {
-            ProviderDetailInfoRow(label: L("Auth"), value: authMethod)
         }
 
         if self.showsAccountInfo, let planRow = ProviderDetailView<EmptyView>.planRow(

@@ -34,7 +34,7 @@ struct ProviderPluginIconProviderTests {
     func `host advertises built-in icon support without changing plugin identity`(
         engine: ProviderPluginEngineKind) async throws
     {
-        for provider in [UsageProvider.claude, .codex, .antigravity, .zai] {
+        for provider in [UsageProvider.claude, .codex, .antigravity, .gemini] {
             let runtime = try ProviderPluginTransportTests.runtime(engine, body: """
             if (ctx.env.supportsIconProvider !== true) throw new Error('icon support missing');
             return { iconProvider: '\(provider.rawValue)', primary: { usedPercent: 25 },
@@ -43,7 +43,7 @@ struct ProviderPluginIconProviderTests {
             let snapshot = try await runtime.fetchUsage()
             #expect(snapshot.iconProvider == provider)
             #expect(snapshot.primary?.usedPercent == 25)
-            #expect(snapshot.identity?.providerID?.rawValue == "neuralwatt")
+            #expect(snapshot.identity?.providerID?.rawValue == "claude")
             let copy = snapshot.withDataConfidence(.percentOnly).with(details: [])
             #expect(copy.iconProvider == provider)
             let encoded = try JSONEncoder().encode(copy)
